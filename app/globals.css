@@ -31,7 +31,7 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}
 
 
-/* QONSUL editorial direction. Palette awaits the selected logo artwork. */
+/* Editorial structure inspired by the supplied reference. Brand overrides below. */
 :root{--paper:#f0f1f0;--ink:#202a38;--muted:#67717e;--green:#323d4f;--green-dark:#202a38;--lime:#c2d3de;--line:#d3d8dc;--soft:#e5e9ec}
 .home-header{position:absolute;inset:0 0 auto;background:transparent;border-bottom:1px solid #ffffff30;color:white;backdrop-filter:none;height:96px}
 .home-header .brand img{filter:brightness(0) invert(1)}.home-header nav{margin-left:auto}.home-header nav a:hover{color:#b9dce8}.home-header .header-cta{border-color:#ffffff60;border-radius:0}
@@ -51,3 +51,30 @@
 @media(max-width:950px){.home-header nav:not(.nav-overlay){display:none}.hero-content{padding-top:170px}.cinematic-hero{min-height:780px}.positioning-copy{margin-left:0}.footer-top{grid-template-columns:1fr 1fr}.footer-top nav{grid-column:1/-1}}
 @media(max-width:700px){.home-header{height:78px;gap:12px}.home-header .header-cta{margin-left:auto;padding:10px;font-size:10px}.header .nav-overlay{top:78px}.hero-content{padding:150px 6% 40px}.cinematic-hero{min-height:790px}.cinematic-hero h1{font-size:clamp(32px,7.5vw,53px);line-height:1.13;margin:24px 0}.hero-bottom p{font-size:16px}.hero-down{display:none}.hero-launch{margin-top:40px}.hero-launch>div{flex-direction:column}.hero-launch input{font-size:16px;width:100%;padding:19px 15px}.hero-launch button{padding:14px 17px}.hero-launch label{font-size:8px}.hero-launch small{line-height:1.7;font-size:9px}.section-wrap{margin:0;padding-left:6%;padding-right:6%}.positioning{padding-top:65px;padding-bottom:65px}.positioning h2{font-size:36px;margin:25px 0 30px}.positioning-copy{grid-template-columns:1fr;gap:20px}.positioning-copy p{font-size:16px}.diagnostic-section{padding:60px 0}.diagnostic-heading{margin-bottom:30px}.diagnostic-heading h2{font-size:36px}.diagnostic-heading p{font-size:14px}.bottom-cta{padding:65px 6%}.bottom-cta h2{font-size:42px}.bottom-cta p{font-size:15px}.footer-top{grid-template-columns:1fr;gap:30px}.site-footer{padding:45px 6% 25px}.site-footer .footer-bottom{flex-direction:column;gap:20px}.footer-top p{font-size:15px}}
 @media(max-width:420px){.home-header .brand img{width:105px}.home-header .header-cta span{display:none}.home-header .header-cta{font-size:9px;padding:10px 8px;gap:0}.menu-toggle{font-size:23px;padding:6px}.steps{font-size:8px;gap:5px}.steps b{width:18px;height:18px}.about-signature{font-size:20px}}
+
+/* Selected QONSUL artwork: navy #012542, steel blue #527B99, silver #718393. */
+:root{--brand-navy:#012542;--brand-blue:#527b99;--brand-silver:#718393;--brand-light:#a9bece;--paper:#f4f6f7;--ink:#012542;--muted:#546b7d;--green:#012542;--green-dark:#002039;--lime:#d5e0e7;--line:#ced9e1;--soft:#e6edf2;--diagram-line:#527b99;--accent:#527b99}
+.brand{line-height:0}.brand-art{position:relative;display:block;width:216px;aspect-ratio:1448/370;overflow:hidden}
+.brand .brand-art img{position:absolute;top:-91.891892%;left:0;width:100%;max-width:none;height:auto;object-fit:initial;filter:none}
+/* Keep the uploaded image unchanged; the frame excludes its export padding. */
+.home-header{background:#f4f6f7f7;color:var(--brand-navy);border-bottom:1px solid #becdd9;backdrop-filter:blur(14px)}
+.home-header .header-cta{border-color:var(--brand-blue)}.home-header nav a:hover{color:var(--brand-blue)}.header .nav-overlay{background:var(--brand-navy);color:white}
+.hero-launch button{background:#d5e0e7;color:var(--brand-navy)}.hero-launch button:hover{background:white}
+.cinematic-hero:before{background:linear-gradient(90deg,#012542e8 5%,#01254263 100%),linear-gradient(0deg,#002039f5 0%,transparent 90%)}
+.capability-panel{background:#012542}.capability-1{background:#234f70}.capability-2{background:#002039}.capability-copy p{color:#ccd9e2}.capability-number,.visual-label,.visual-caption,.concept-note{color:#b9cbd8}
+.about-section{background:#dfe7ec}.about-signature span{color:var(--brand-blue)}.about-columns p{color:#425f75}.about-signature{border-color:#a8bbc9}
+.diagnostic-section{background:#e8eef2}.data-inventory{background:#f2f6f8}.lab-mark{background:#f2f6f8}.steps .active b{background:var(--brand-navy)}.category-title strong{color:var(--brand-navy)}.cause-category.selected{border-color:var(--brand-blue);box-shadow:0 0 0 2px #d2e0ea}
+.fish-problem{background:#dbe6ee;border-color:var(--brand-blue)}.cause-source{color:#426c8b}.data-options input,.check-label input{accent-color:var(--brand-navy)}
+.bottom-cta{background:var(--brand-navy)}.site-footer{background:var(--paper);color:var(--brand-navy);border-top:1px solid var(--line)}.site-footer .brand-art{width:260px}.site-footer .footer-bottom{border-top-color:#becbd5;color:#526b7e}
+.footer-top{gap:45px}.footer-top p{color:#42617b}.button-green:hover,.button-dark:hover{background:#234f70}
+.brand-rule{display:flex;gap:7px;margin-top:22px;height:5px;max-width:230px}.brand-rule i{background:#012542;flex:1}.brand-rule i:nth-child(2){background:#234f70}.brand-rule i:nth-child(3){background:#527b99}.brand-rule i:nth-child(4){background:#718393}
+@media(max-width:1100px){.home-header{gap:20px}.header nav{gap:20px}.brand-art{width:190px}}
+@media(max-width:700px){.brand-art{width:170px}.home-header{height:84px;gap:12px;padding:0 5%}.home-header .header-cta{display:none}.home-header .menu-toggle{margin-left:auto}.header .nav-overlay{top:84px}.header:not(.home-header){min-height:90px;height:auto;padding-top:15px;padding-bottom:15px;gap:15px}.header:not(.home-header) .button{font-size:10px;max-width:130px}.site-footer .brand-art{width:240px}.footer-top{gap:30px}}
+@media(max-width:380px){.brand-art{width:150px}.header:not(.home-header) .button{max-width:110px;padding:9px;line-height:1.5}.site-footer .brand-art{width:220px}}
+
+.brand-symbol{display:block;position:relative;width:38px;aspect-ratio:1;overflow:hidden}
+.brand-symbol img{position:absolute;width:381.052632%;max-width:none;height:auto;top:-89.473684%;left:0}
+.lab-mark{width:48px;height:48px;border:0;background:#f4f6f7}
+.hero-content .brand-rule i:nth-child(1){background:#527b99}.hero-content .brand-rule i:nth-child(2){background:#718393}.hero-content .brand-rule i:nth-child(3){background:#a9bece}.hero-content .brand-rule i:nth-child(4){background:#d5e0e7}
+.hero-content .brand-rule{max-width:178px;height:3px;margin-top:17px}
+@media(max-width:700px){.lab-mark{width:40px;height:40px}.brand-symbol{width:32px}}

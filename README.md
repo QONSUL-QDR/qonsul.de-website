@@ -4,8 +4,8 @@ Responsive Beratungswebsite mit interaktivem Ishikawa-Board. Eigenständiges Pro
 
 ## Designquellen
 
-- Bestehendes Logo aus `../mietvertrag-app/public/qonsul-logo.png` bleibt vorläufig erhalten. Der ausdrücklich gewünschte zweite Logoentwurf aus dem Projekt-Chat ist noch nicht als Bild verfügbar; die Chat-Schnittstelle liefert nur Text. Das Originalbild wurde beim Nutzer angefordert.
-- Vorläufige Farbbasis #323D4F (im Projekt-Chat genannte QONSUL-Primärfarbe), Navy, kühles Weiß und Stahlblau. Endgültige Farbwerte erst gegen den zweiten Logoentwurf abgleichen. Strukturreferenz https://helsing.ai/: bildfüllender Einstieg, Positionierung, großflächige Kompetenzkapitel, Unternehmen und redaktionelle Inhalte. Keine Helsing-Texte, Marken oder Militärbilder übernommen.
+- Ausgewähltes Logo: vom Nutzer hochgeladenes PNG, unverändert als `public/qonsul-logo-selected.png` gespeichert (SHA-256 F08B305210555987A5D82D2EB3E9395BA59E685624BF7F3BFE0C227CB77686E1). `app/brand.tsx` zeigt die Originalpixel in einem CSS-Rahmen ohne den übergroßen transparenten Exportrand. Keine Nachzeichnung, Umfärbung oder KI-Rekonstruktion des Logos.
+- Farbbasis aus den deckenden Pixeln des gewählten Logos: Marineblau #012542, mittleres Blau #234F70, Stahlblau #527B99 und Silbergrau #718393; kühles Weiß #F4F6F7 für lesbare Markenflächen. Header, Footer, Diagramm, Schaltflächen und Report sind darauf abgestimmt. Strukturreferenz https://helsing.ai/: bildfüllender Einstieg, Positionierung, großflächige Kompetenzkapitel, Unternehmen und redaktionelle Inhalte. Keine Helsing-Texte, Marken oder Militärbilder übernommen.
 - Inhaltliche Grundlage: Projekt-Chats „Website für QM-Beratung“ und „QONSUL Positionierung und Startplan“. Praxisbeispiele und abstrakte Grafiken sind ausdrücklich illustrativ, keine Kundenreferenzen oder Messdaten. Bild: Jelifer Maniago, https://unsplash.com/photos/a-machine-that-is-cutting-a-piece-of-metal-O5rSp_U-Pa0 (Unsplash-Lizenz), lokal bereitgestellt; keine externe Bildanfrage durch Besucher.
 
 ## Stack und Funktionen
