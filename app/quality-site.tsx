@@ -1,14 +1,40 @@
 'use client';
+import { useState } from 'react';
 import IshikawaLab from './ishikawa-lab';
-import SiteContent, { Metrics } from './site-content';
+import SiteContent from './site-content';
+
 export default function QualitySite() {
+  const [problem,setProblem]=useState('');
+  const [launch,setLaunch]=useState({problem:'',id:0});
+  const [menu,setMenu]=useState(false);
   return <>
-    <header className="header"><a className="brand" href="/" aria-label="Qonsul Startseite"><img src="/qonsul-logo.png" alt="Qonsul" /></a><nav><a href="#leistungen">Leistungen ⌄</a><a href="#ueber-uns">Über uns</a><a href="#insights">Insights & Blog</a></nav><details className="mobile-menu"><summary aria-label="Navigation öffnen">☰</summary><div><a href="#leistungen">Leistungen</a><a href="#ueber-uns">Über uns</a><a href="#insights">Insights & Blog</a></div></details><a className="button button-dark header-cta" href="#analyse">Problem analysieren <span>↗</span></a></header>
-    <a className="skip-link" href="#analyse">Direkt zur Analyse</a><main>
-      <section className="hero"><div className="hero-copy"><div className="eyebrow"><span className="live-dot"/> DATA-DRIVEN QUALITY ENGINEERING</div><h1>Weniger Fehlersuche.<br/><span>Mehr Fortschritt.</span></h1><p>Schluss mit blinder Fehlersuche. Wir machen Software-Qualität messbar — und Ihr Engineering-Team wirksamer.</p><div className="hero-points"><span>↗ Daten statt Bauchgefühl</span><span>◎ Qualität, die bleibt</span></div></div><div className="hero-aside"><span>VON DER URSACHE ZUR WIRKUNG</span><div className="signal-graphic">{Array.from({length:24},(_,i)=><i key={i}/>)}</div><small>Komplexität verstehen. Klarheit schaffen.</small></div></section>
-      <IshikawaLab /><Metrics />
-      <section id="leistungen" className="services section-wrap"><div className="section-heading"><div><div className="eyebrow">QUALITÄT IST KEIN ZUFALL.</div><h2>Gute Software braucht<br/>mehr als gute Tests.</h2></div><p>Wir verbinden Engineering, Automatisierung und Daten.<br/>Damit aus Erkenntnissen echte Verbesserungen werden.</p></div><div className="service-grid">{[['01','Quality Engineering','Qualität von Anfang an.','Von der ersten Anforderung bis zum Betrieb: Wir verankern Qualität in Ihrem gesamten Entwicklungsprozess.'],['02','Test-Automation','Vertrauen in jeden Release.','Robuste Tests, schnelles Feedback und verlässliche Pipelines. Automatisierung, die Ihrem Team Arbeit abnimmt.'],['03','DORA-Metriken','Fortschritt, den Sie messen.','Verstehen Sie Ihren Delivery-Prozess. Erkennen Sie Engpässe und verbessern Sie, was wirklich Wirkung zeigt.']].map(s=><a href={`/leistungen/${["quality-engineering","test-automation","dora-metriken"][Number(s[0])-1]}`} className="service-card" key={s[0]}><div><span className="service-number">{s[0]}</span><span className="service-arrow">↗</span></div><h3>{s[1]}</h3><strong>{s[2]}</strong><p>{s[3]}</p><span className="text-link">Gemeinsam Potenziale finden ↗</span></a>)}</div></section>
-      <SiteContent /><section className="bottom-cta" id="ueber-uns"><div><div className="eyebrow">QONSUL. ENGINEERING MIT WEITBLICK.</div><h2>Die richtigen Fragen.<br/>Die nächsten Schritte.</h2><p className="about-description">Qonsul verbindet Qualitätsdenken mit Engineering-Praxis. Unser Ansatz: zuhören, Zusammenhänge verstehen und gemeinsam mit Ihrem Team wirksame Verbesserungen entwickeln.</p></div><a className="button button-lime" href="#analyse">Ihr Problem gemeinsam verstehen ↗</a></section>
-    </main><footer><a className="brand" href="/"><img src="/qonsul-logo.png" alt="Qonsul"/></a><span>© {new Date().getFullYear()} Qonsul · Quality with clarity.</span><div><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a><a href="#analyse">Kontakt ↗</a></div></footer>
+    <a className="skip-link" href="#analyse">Direkt zur Analyse</a>
+    <header className="header home-header">
+      <a className="brand" href="/" aria-label="QONSUL Startseite"><img src="/qonsul-logo.png" alt="QONSUL Managementberatung"/></a>
+      <nav aria-label="Hauptnavigation"><a href="#leistungen">Kompetenzen</a><a href="#methode">Unser Ansatz</a><a href="#ueber-uns">QONSUL</a><a href="#insights">Insights</a></nav>
+      <a className="button button-outline header-cta" href="#analyse">Problem analysieren <span>↗</span></a>
+      <button className="menu-toggle" aria-label={menu?'Menü schließen':'Menü öffnen'} aria-expanded={menu} aria-controls="main-menu" onClick={()=>setMenu(!menu)}>{menu?'×':'☰'}</button>
+      {menu&&<nav className="nav-overlay" id="main-menu" aria-label="Weitere Navigation">{[['Kompetenzen','#leistungen'],['Quality Diagnostic','#analyse'],['Unser Ansatz','#methode'],['Über QONSUL','#ueber-uns'],['Insights','#insights']].map(([label,href])=><a key={href} href={href} onClick={()=>setMenu(false)}>{label}<span>↗</span></a>)}</nav>}
+    </header>
+    <main>
+      <section className="hero cinematic-hero" aria-labelledby="hero-title">
+        <img className="hero-image" src="/precision-engineering.jpg" alt="Präzisionswerkzeug über einem gefrästen Metallbauteil" fetchPriority="high" width="1920" height="1280"/>
+        <div className="hero-content">
+          <div className="eyebrow">QONSUL / DATA · QUALITY · RISK</div>
+          <h1 id="hero-title">Qualität verstehen.<br/><span>Risiken vorausdenken.</span></h1>
+          <div className="hero-bottom"><p>Wir verbinden Quality Engineering, technisches Risikomanagement und Data Science. Für bessere Entscheidungen in Ihrer Produktentwicklung.</p><a className="hero-down" href="#positionierung" aria-label="QONSUL kennenlernen">↓</a></div>
+          <form className="hero-launch" onSubmit={e=>{e.preventDefault();setLaunch({problem:problem.trim(),id:launch.id+1});}}>
+            <label htmlFor="hero-problem">IHR PROBLEM. UNSER GEMEINSAMER AUSGANGSPUNKT.</label>
+            <div><input id="hero-problem" required minLength={10} maxLength={600} value={problem} onChange={e=>setProblem(e.target.value)} placeholder="z. B. Sporadische Ausfälle bei der thermischen Validierung"/><button type="submit">Analyse starten <span>↗</span></button></div>
+            <small>Quality Diagnostic · Ohne Anmeldung starten · Keine vertraulichen Daten eingeben</small>
+          </form>
+        </div>
+      </section>
+      <section className="positioning section-wrap" id="positionierung"><div className="section-index">01 / UNSER ANSPRUCH</div><h2>Komplexe Probleme.<br/>Belastbare Entscheidungen.</h2><div className="positioning-copy"><p>Qualitätsprobleme entstehen im Zusammenspiel von Produkt, Prozess und Menschen. Ihre Lösung braucht mehr als eine einzelne Perspektive.</p><p>QONSUL verbindet präventive Qualitätsmethoden mit technischer Risikoanalyse und Daten. Wir machen Zusammenhänge sichtbar, prüfen Hypothesen und helfen Ihrem Team, wirksame Maßnahmen zu priorisieren.</p></div></section>
+      <SiteContent/>
+      <section className="diagnostic-section"><div className="section-wrap diagnostic-heading"><span className="section-index">05 / QUALITY DIAGNOSTIC</span><h2>Der erste Schritt<br/>ist eine gute Frage.</h2><p>Bringen Sie Ihr Qualitätsproblem mit. Gemeinsam werden aus Beobachtungen prüfbare Hypothesen.</p></div><IshikawaLab launch={launch}/></section>
+      <section className="bottom-cta" id="kontakt"><div><div className="eyebrow">VON DER ANALYSE ZUR VERÄNDERUNG</div><h2>Was möchten Sie<br/>besser verstehen?</h2><p>Strukturieren Sie Ihre Herausforderung und nehmen Sie die Analyse als Grundlage für Ihr Team oder ein Gespräch mit QONSUL mit.</p></div><a className="button button-lime" href="#analyse">Problem analysieren ↗</a></section>
+    </main>
+    <footer className="site-footer"><div className="footer-top"><a className="brand" href="/"><img src="/qonsul-logo.png" alt="QONSUL"/></a><p>Data. Quality. Risk.<br/>Bessere Entscheidungen beginnen hier.</p><nav aria-label="Footernavigation"><a href="#leistungen">Kompetenzen</a><a href="#ueber-uns">Über QONSUL</a><a href="#insights">Insights</a><a href="#analyse">Kontakt</a></nav></div><div className="footer-bottom"><span>© {new Date().getFullYear()} QONSUL Managementberatung</span><div><a href="/impressum">Impressum</a><a href="/datenschutz">Datenschutz</a></div></div></footer>
   </>;
 }

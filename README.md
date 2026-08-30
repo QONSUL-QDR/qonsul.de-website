@@ -1,18 +1,18 @@
-# Qonsul · Data-Driven Quality Engineering
+# QONSUL · Data · Quality · Risk
 
 Responsive Beratungswebsite mit interaktivem Ishikawa-Board. Eigenständiges Projekt; die benachbarte Mietvertrags-App bleibt unverändert.
 
 ## Designquellen
 
-- Logo unverändert aus `../mietvertrag-app/public/qonsul-logo.png` übernommen.
-- Farben aus `../mietvertrag-app/app/globals.css`: dunkle Grüntöne, helle warme Flächen, dezente Lime-Akzente.
-- Keine weiteren belastbaren Brand-Guidelines, Unternehmenspflichtangaben oder Kundenreferenzen lagen vor. Praxisbeispiele sind ausdrücklich illustrativ.
+- Bestehendes Logo aus `../mietvertrag-app/public/qonsul-logo.png` bleibt vorläufig erhalten. Der ausdrücklich gewünschte zweite Logoentwurf aus dem Projekt-Chat ist noch nicht als Bild verfügbar; die Chat-Schnittstelle liefert nur Text. Das Originalbild wurde beim Nutzer angefordert.
+- Vorläufige Farbbasis #323D4F (im Projekt-Chat genannte QONSUL-Primärfarbe), Navy, kühles Weiß und Stahlblau. Endgültige Farbwerte erst gegen den zweiten Logoentwurf abgleichen. Strukturreferenz https://helsing.ai/: bildfüllender Einstieg, Positionierung, großflächige Kompetenzkapitel, Unternehmen und redaktionelle Inhalte. Keine Helsing-Texte, Marken oder Militärbilder übernommen.
+- Inhaltliche Grundlage: Projekt-Chats „Website für QM-Beratung“ und „QONSUL Positionierung und Startplan“. Praxisbeispiele und abstrakte Grafiken sind ausdrücklich illustrativ, keine Kundenreferenzen oder Messdaten. Bild: Jelifer Maniago, https://unsplash.com/photos/a-machine-that-is-cutting-a-piece-of-metal-O5rSp_U-Pa0 (Unsplash-Lizenz), lokal bereitgestellt; keine externe Bildanfrage durch Besucher.
 
 ## Stack und Funktionen
 
 Next.js App Router auf dem durch Sites erzeugten Vinext/Vite-Runtime, React 19, TypeScript, Tailwind 4, Cloudflare Workers, D1 mit Drizzle-Migrationen. Eine Migration erzeugt Reports, kurzlebige Rate-Limit-Zähler und optionale aggregierte Trends.
 
-- Start ohne Login oder Speicherung; sechs Kategorien, maximal drei eigene Ursachen je Kategorie; eigene Ursachen bearbeiten/löschen, generierte Vorschläge aufklappen und entfernen.
+- Quality Diagnostic mit Produkt, Prozess, Material, Mensch, Messung und Umgebung. Start ohne Login oder Speicherung; sechs Kategorien, maximal drei eigene Ursachen je Kategorie; eigene Ursachen bearbeiten/löschen, generierte Vorschläge aufklappen und entfernen.
 - OpenAI Responses API mit striktem JSON-Schema, 1–2 Hypothesen/Kategorie und separatem KI-Opt-in. `store:false`; offensichtliche sensible Muster werden entfernt, keine Garantie vollständiger Anonymisierung.
 - Ohne Schlüssel sowie bei Fehler/Timeout ausdrücklich gekennzeichneter Regelkatalog, keine vorgetäuschte KI. Externer Aufruf nach 2,5 Sekunden abgebrochen; reale End-to-End-Latenz hängt von Netzwerk, Startzeit und Provider ab, keine 3-Sekunden-Garantie.
 - Direktdownload als druckfähige eigenständige HTML-Datei ohne Kontaktabgabe; im Browser auch als PDF druckbar.
@@ -33,13 +33,13 @@ Für die lokale D1-Datenbank dieselbe DB-Bindung und State-Verzeichnis wie die V
 
 ## Prüfen
 
-`pnpm typecheck`, `pnpm test:api` bei laufender lokaler Vorschau, `pnpm build`.
+`node scripts/check-analysis.mjs`, `pnpm typecheck`, `pnpm test:api` bei laufender lokaler Vorschau, `pnpm build`.
 
 Der API-Test verwendet nur fiktive Daten, erlaubt ausschließlich localhost, verweigert produktiven Modus/aktive KI und löscht den eigenen Report. Er prüft Validierung, Origin-Schutz, Größenlimits, Vorschläge, Einwilligung, Persistenz, Wiederholungen, Zugriffsschutz, HTML-Escaping, Löschung, Seiten und Metadaten. Browser-/Screenshot-Tests wurden nicht beauftragt.
 
 ## Vor produktiver Freigabe erforderlich
 
-1. Vollständige echte Impressumsangaben und Datenschutzkontakt in `LEGAL_*`/`PUBLIC_CONTACT_EMAIL` hinterlegen. Rechtliche Texte prüfen lassen; Vorschau-Entwurf ersetzen. Keine Compliance-Zertifizierung wird behauptet.
+1. Firmenname, Anschrift, Geschäftsführung, HRB und USt-ID sind aus QONSUL-Vorlagen hinterlegt. Geschäftlichen E-Mail-/Telefonkontakt und Datenschutzkontakt in `LEGAL_*`/`PUBLIC_CONTACT_EMAIL` hinterlegen. Rechtliche Texte prüfen lassen; Vorschau-Entwurf ersetzen. Keine Compliance-Zertifizierung wird behauptet.
 2. OpenAI-Schlüssel und `OPENAI_MODEL` nur nach Freigabe bereitstellen. DPA, Datenregionen und Anbieterprotokolle prüfen. Der OpenAI-Developers-Plugin/API-Key-Skill ist in dieser Sitzung nicht verfügbar; Schlüssel wurde nicht erstellt.
 3. HubSpot Private-App-Zugang mit benötigten Kontakt-/Notizrechten und Berechtigungen zur Suche bereitstellen; zuerst mit fiktivem Kontakt in Sandbox prüfen. Keine Live-CRM-Verbindung wurde getestet.
 4. Starkes zufälliges `RATE_LIMIT_SALT` und `MAINTENANCE_SECRET` setzen. Öffentliche Seite erst nach Missbrauchsschutz-Prüfung freigeben; zusätzlicher Bot-Schutz empfohlen.
@@ -49,9 +49,13 @@ Der API-Test verwendet nur fiktive Daten, erlaubt ausschließlich localhost, ver
 
 ## Primärquellen
 
-- https://dora.dev/guides/dora-metrics/
+- https://www.itl.nist.gov/div898/handbook/pmc/section3/pmc3.htm
 - https://developers.openai.com/api/docs/guides/structured-outputs
 - https://developers.hubspot.com/docs/api-reference/legacy/crm/activities/notes/guide
-- https://playwright.dev/docs/best-practices
+- https://asq.org/quality-resources/fmea
 - https://asq.org/quality-resources/fishbone
 - https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32016R0679
+
+## Inhaltliche Überarbeitung 30.08.2026
+
+DORA und Software-QA aus der Hauptpositionierung entfernt. Neue Kompetenzseiten Quality Engineering, Risk Engineering und Quality Analytics. Regel- und KI-Hypothesen nennen konkrete Prüfschritte, passende Qualitätskennzahlen und benötigte Datentypen. Die optionale Dateninventur wird im Report und in der CRM-Notiz mitgespeichert. Sie ist eine Selbstauskunft, kein Daten-Upload, kein Analyseergebnis und kein Evidence Score. Alte Reports behalten beim Lesen ihre ursprünglichen Kategorien. Keine Datenbankmigration erforderlich.
