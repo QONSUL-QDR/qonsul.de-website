@@ -10,6 +10,7 @@ await compile(path.join(root,'lib','analysis.ts'),path.join(tmp,'analysis.mjs'))
 const bundled=path.join(tmp,'ishikawa-pdf.mjs');
 await compile(path.join(root,'lib','ishikawa-pdf.ts'),bundled);
 const {ishikawaPdf}=await import(pathToFileURL(bundled).href+'?v='+Date.now());
+const logoJpeg=new Uint8Array(await readFile(path.join(root,'public','qonsul-logo-print.jpg')));
 const categories=['Produkt','Prozess','Material','Mensch','Messung','Umgebung'];
 const examples={
   Produkt:['Toleranzkette berücksichtigt thermische Ausdehnung nicht vollständig','Funktionsreserve im kritischen Lastfall ist zu gering','Schnittstellenanforderung wurde unterschiedlich interpretiert'],
@@ -21,5 +22,5 @@ const examples={
 };
 const analysis={problem:'Sporadische Funktionsausfälle nach thermischer Belastung in der Serienprüfung',mode:'rules',availableData:['Prüf- & Messdaten','Umgebungsdaten'],causes:categories.flatMap(category=>examples[category].map((text,index)=>({id:`sample-${category}-${index}`,category,text,source:index===0?'user':'rules'})))};
 const file=path.join(output,'QONSUL-Ishikawa-A4-Querformat-Muster.pdf');
-await writeFile(file,ishikawaPdf(analysis,{watermark:true,createdAt:new Date('2026-08-31T12:00:00Z')}));
+await writeFile(file,ishikawaPdf(analysis,{watermark:true,createdAt:new Date('2026-08-31T12:00:00Z'),logoJpeg,logoWidth:900,logoHeight:219}));
 console.log(file);
