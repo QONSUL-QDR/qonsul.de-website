@@ -25,4 +25,8 @@ export async function rateLimit(request: Request, action: string, limit: number)
   const row=await db.prepare('INSERT INTO rate_limits (key, count, expires_at) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1 RETURNING count').bind(key,(window+1)*3600000).first<{count:number}>();
   return (row?.count||0)<=limit;
 }
-export async function purgeExpired(){ await rawDb().prepare('DELETE FROM reports WHERE expires_at < ?').bind(Date.now()).run(); }
+export async function purgeExpired(){
+  const db=rawDb(),now=Date.now();
+  await db.prepare('DELETE FROM reports WHERE expires_at < ?').bind(now).run();
+  try{await db.prepare('DELETE FROM contact_requests WHERE expires_at < ?').bind(now).run();}catch{/* Migration may still be pending in an older local preview. */}
+}

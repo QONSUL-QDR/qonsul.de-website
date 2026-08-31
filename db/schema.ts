@@ -8,3 +8,10 @@ export const reports = sqliteTable('reports', {
 },t=>[index('idx_reports_expires_at').on(t.expiresAt)]);
 export const rateLimits=sqliteTable('rate_limits',{key:text('key').primaryKey(),count:integer('count').notNull(),expiresAt:integer('expires_at').notNull()},t=>[index('idx_rate_limits_expires_at').on(t.expiresAt)]);
 export const trends=sqliteTable('trends',{key:text('key').primaryKey(),category:text('category').notNull(),quarter:text('quarter').notNull(),count:integer('count').notNull().default(0)});
+export const contactRequests=sqliteTable('contact_requests',{
+  id:text('id').primaryKey(),clientTokenHash:text('client_token_hash').notNull().unique(),
+  name:text('name').notNull(),email:text('email').notNull(),phone:text('phone'),company:text('company'),message:text('message').notNull(),
+  privacyVersion:text('privacy_version').notNull(),createdAt:integer('created_at').notNull(),expiresAt:integer('expires_at').notNull(),
+  crmStatus:text('crm_status').notNull().default('pending'),crmContactId:text('crm_contact_id'),crmNoteId:text('crm_note_id'),
+  emailStatus:text('email_status').notNull().default('pending'),emailProviderId:text('email_provider_id'),
+},t=>[index('idx_contact_requests_expires_at').on(t.expiresAt)]);

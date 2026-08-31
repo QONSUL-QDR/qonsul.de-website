@@ -12,7 +12,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test:api": "node scripts/check-api.mjs"
+    "test:api": "node scripts/check-api.mjs",
+    "pdf:sample": "node scripts/create-pdf-sample.mjs"
   },
   "dependencies": {
     "next": "16.2.6",

@@ -2,6 +2,7 @@ import { escapeHtml } from './report';
 import { CATEGORIES, type Analysis } from './analysis';
 import { rawDb, setting } from './server';
 export type Lead = {id:string;name:string;email:string;company:string;analysis:Analysis};
+export type ContactLead = {id:string;name:string;email:string;phone:string;company:string;message:string};
 async function hubspot(path:string,method:string,body?:unknown){
   const response=await fetch(`https://api.hubspot.com${path}`,{method,signal:AbortSignal.timeout(4000),headers:{Authorization:`Bearer ${setting('HUBSPOT_ACCESS_TOKEN')}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
   if(!response.ok)throw new Error(`CRM ${response.status}`);
@@ -27,6 +28,31 @@ export async function syncLead(lead:Lead){
   }catch{
     // A timeout may occur after HubSpot accepted a note. Avoid blind automatic retries.
     await db.prepare("UPDATE reports SET crm_status = 'needs_review' WHERE id = ?").bind(lead.id).run();
+    return 'needs_review';
+  }
+}
+
+export async function syncContactLead(lead:ContactLead){
+  if(setting('PRODUCTION_READY')!=='true'||!setting('HUBSPOT_ACCESS_TOKEN'))return 'not_configured';
+  const db=rawDb();
+  const claimed=await db.prepare("UPDATE contact_requests SET crm_status = 'sending' WHERE id = ? AND crm_status = 'pending' RETURNING id").bind(lead.id).first();
+  if(!claimed)return 'pending';
+  try{
+    const found=await hubspot('/crm/v3/objects/contacts/search','POST',{filterGroups:[{filters:[{propertyName:'email',operator:'EQ',value:lead.email}]}],limit:1});
+    const existing=found.results as {id:string}[]|undefined;
+    const [firstname,...rest]=lead.name.split(/\s+/);
+    const properties={email:lead.email,firstname,lastname:rest.join(' '),...(lead.phone?{phone:lead.phone}:{}),...(lead.company?{company:lead.company}:{})};
+    let contactId=existing?.[0]?.id;
+    if(contactId)await hubspot(`/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,'PATCH',{properties});
+    else{const created=await hubspot('/crm/v3/objects/contacts','POST',{properties});contactId=String(created.id);}
+    await db.prepare('UPDATE contact_requests SET crm_contact_id = ? WHERE id = ?').bind(contactId,lead.id).run();
+    const e=escapeHtml;
+    const note=`<h2>QONSUL · Kontaktanfrage</h2><p><strong>Nachricht</strong></p><p>${e(lead.message).replace(/\n/g,'<br>')}</p><p><strong>Kontakt</strong><br>${e(lead.name)} · ${e(lead.email)}${lead.phone?` · ${e(lead.phone)}`:''}${lead.company?`<br>Unternehmen: ${e(lead.company)}`:''}</p><p>Interne Referenz: ${e(lead.id)}</p>`;
+    const createdNote=await hubspot('/crm/v3/objects/notes','POST',{properties:{hs_timestamp:new Date().toISOString(),hs_note_body:note},associations:[{to:{id:contactId},types:[{associationCategory:'HUBSPOT_DEFINED',associationTypeId:202}]}]});
+    await db.prepare("UPDATE contact_requests SET crm_note_id = ?, crm_status = 'sent' WHERE id = ?").bind(String(createdNote.id),lead.id).run();
+    return 'sent';
+  }catch{
+    await db.prepare("UPDATE contact_requests SET crm_status = 'needs_review' WHERE id = ?").bind(lead.id).run();
     return 'needs_review';
   }
 }
