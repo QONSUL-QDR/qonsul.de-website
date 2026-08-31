@@ -59,3 +59,11 @@ Der API-Test verwendet nur fiktive Daten, erlaubt ausschließlich localhost, ver
 ## Inhaltliche Überarbeitung 30.08.2026
 
 DORA und Software-QA aus der Hauptpositionierung entfernt. Neue Kompetenzseiten Quality Engineering, Risk Engineering und Quality Analytics. Regel- und KI-Hypothesen nennen konkrete Prüfschritte, passende Qualitätskennzahlen und benötigte Datentypen. Die optionale Dateninventur wird im Report und in der CRM-Notiz mitgespeichert. Sie ist eine Selbstauskunft, kein Daten-Upload, kein Analyseergebnis und kein Evidence Score. Alte Reports behalten beim Lesen ihre ursprünglichen Kategorien. Keine Datenbankmigration erforderlich.
+
+## Branchen-Bildfolge 31.08.2026
+
+Zwölf echte Industriefotografien in der vom Betreiber vorgegebenen Prioritätsreihenfolge. Quellen und Urheber stehen in `lib/hero-slides.ts` und werden im Impressum angezeigt. Die Fotografien wurden visuell geprüft; sie sind illustrative Branchenmotive, keine Kundenreferenzen und keine technischen Dokumentationen. Keine generierten Personen oder Maschinen.
+
+Die Bildfolge steht acht Sekunden je Motiv, gefolgt von 1,2 Sekunden Überblendung ohne Zoom oder Kamerafahrt. Alle Branchen lassen sich über ein natives Auswahlfeld sowie Vor/Zurück direkt erreichen. Manuelle Auswahl pausiert bis zum erneuten Start. Bei reduzierter Bewegung bleibt die Bedienung manuell. Hintergrund-Tabs, ein aus dem Blick gescrollter Hero und Texteingaben pausieren automatisch; Datensparmodus startet pausiert. Unterbrechungen beginnen danach mit einer vollen Standzeit.
+
+WebP-Dateien liegen lokal in `public/industries`: 1920 × 1200 für Desktop, 900 × 1400 für Mobilgeräte. Beim ersten Render wird nur das erste Motiv angefordert, anschließend wird nur das nächste Motiv vorab geladen. Bilder werden vor dem Übergang dekodiert; bei einem Ladefehler bleibt das zuletzt sichtbare Bild erhalten. Es gibt keine Bildabrufe bei Drittanbietern durch Website-Besucher. Branding und Social-Preview bleiben unverändert.

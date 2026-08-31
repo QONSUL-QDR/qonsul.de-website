@@ -3,6 +3,7 @@ import Brand from '@/app/brand';
 import { useState } from 'react';
 import IshikawaLab from './ishikawa-lab';
 import SiteContent from './site-content';
+import HeroSlideshow from './hero-slideshow';
 
 export default function QualitySite() {
   const [problem,setProblem]=useState('');
@@ -18,8 +19,7 @@ export default function QualitySite() {
       {menu&&<nav className="nav-overlay" id="main-menu" aria-label="Weitere Navigation">{[['Kompetenzen','#leistungen'],['Quality Diagnostic','#analyse'],['Unser Ansatz','#methode'],['Über QONSUL','#ueber-uns'],['Insights','#insights']].map(([label,href])=><a key={href} href={href} onClick={()=>setMenu(false)}>{label}<span>↗</span></a>)}</nav>}
     </header>
     <main>
-      <section className="hero cinematic-hero" aria-labelledby="hero-title">
-        <img className="hero-image" src="/precision-engineering.jpg" alt="Präzisionswerkzeug über einem gefrästen Metallbauteil" fetchPriority="high" width="1920" height="1080"/>
+      <HeroSlideshow>
         <div className="hero-content">
           <div className="eyebrow">QONSUL / DATA · QUALITY · RISK</div><div className="brand-rule" aria-hidden="true"><i/><i/><i/><i/></div>
           <h1 id="hero-title">Qualität verstehen.<br/><span>Risiken vorausdenken.</span></h1>
@@ -30,7 +30,7 @@ export default function QualitySite() {
             <small>Quality Diagnostic · Ohne Anmeldung starten · Keine vertraulichen Daten eingeben</small>
           </form>
         </div>
-      </section>
+      </HeroSlideshow>
       <section className="positioning section-wrap" id="positionierung"><div className="section-index">01 / UNSER ANSPRUCH</div><h2>Komplexe Probleme.<br/>Belastbare Entscheidungen.</h2><div className="positioning-copy"><p>Qualitätsprobleme entstehen im Zusammenspiel von Produkt, Prozess und Menschen. Ihre Lösung braucht mehr als eine einzelne Perspektive.</p><p>QONSUL verbindet präventive Qualitätsmethoden mit technischer Risikoanalyse und Daten. Wir machen Zusammenhänge sichtbar, prüfen Hypothesen und helfen Ihrem Team, wirksame Maßnahmen zu priorisieren.</p></div></section>
       <SiteContent/>
       <section className="diagnostic-section"><div className="section-wrap diagnostic-heading"><span className="section-index">05 / QUALITY DIAGNOSTIC</span><h2>Der erste Schritt<br/>ist eine gute Frage.</h2><p>Bringen Sie Ihr Qualitätsproblem mit. Gemeinsam werden aus Beobachtungen prüfbare Hypothesen.</p></div><IshikawaLab launch={launch}/></section>
