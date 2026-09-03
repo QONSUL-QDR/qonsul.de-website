@@ -5,8 +5,9 @@ import path from 'node:path';
 
 const root=process.cwd(),tmp=path.join(root,'tmp','pdfs'),output=path.join(root,'output','pdf');
 await mkdir(tmp,{recursive:true});await mkdir(output,{recursive:true});
-const compile=async(source,target)=>{const input=await readFile(source,'utf8');const output=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext}}).outputText.replace("'./analysis'","'./analysis.mjs'");await writeFile(target,output);};
+const compile=async(source,target)=>{const input=await readFile(source,'utf8');const output=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext}}).outputText.replace("'./analysis'","'./analysis.mjs'").replace("'./qonsul-logo-pdf'","'./qonsul-logo-pdf.mjs'");await writeFile(target,output);};
 await compile(path.join(root,'lib','analysis.ts'),path.join(tmp,'analysis.mjs'));
+await compile(path.join(root,'lib','qonsul-logo-pdf.ts'),path.join(tmp,'qonsul-logo-pdf.mjs'));
 const bundled=path.join(tmp,'ishikawa-pdf.mjs');
 await compile(path.join(root,'lib','ishikawa-pdf.ts'),bundled);
 const {ishikawaPdf}=await import(pathToFileURL(bundled).href+'?v='+Date.now());
