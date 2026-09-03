@@ -12,6 +12,16 @@ const { d1, r2 } = hostingConfig;
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 
+// Optional overrides for a standalone Cloudflare deploy (own account/D1),
+// independent of the OpenAI Sites-managed project referenced in
+// .openai/hosting.json. Unset by default, so local dev and the existing
+// Sites pipeline are unaffected; a standalone build/deploy step sets
+// CF_D1_DATABASE_ID (from `wrangler d1 create`) to point the build at a
+// real database instead of the local-only placeholder id.
+const standaloneD1DatabaseId = process.env.CF_D1_DATABASE_ID;
+const standaloneD1DatabaseName =
+  process.env.CF_D1_DATABASE_NAME || 'qonsul-website-d1';
+
 const localBindingConfig = {
   main: 'vinext/server/app-router-entry',
   compatibility_flags: ['nodejs_compat'],
@@ -19,8 +29,10 @@ const localBindingConfig = {
     ? [
         {
           binding: d1,
-          database_name: 'site-creator-d1',
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+          database_name: standaloneD1DatabaseId
+            ? standaloneD1DatabaseName
+            : 'site-creator-d1',
+          database_id: standaloneD1DatabaseId || SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
         },
       ]
     : [],
