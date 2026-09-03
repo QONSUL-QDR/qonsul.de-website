@@ -1,69 +1,70 @@
 # QONSUL · Data · Quality · Risk
 
-Responsive Beratungswebsite mit interaktivem Ishikawa-Board. Eigenständiges Projekt; die benachbarte Mietvertrags-App bleibt unverändert.
+Vollständige Beratungswebsite mit Ishikawa-Board, A4-PDF, Branchen-Bildfolge, Kontaktformular und optionaler KI-/CRM-Anbindung.
 
-## Designquellen
+**Status: Anwendungsvorschau, kein freigegebener Betrieb mit echten Kundendaten.** Das GitHub-Repository ist öffentlich. Die Übergabe verändert weder die Zugriffseinstellungen der laufenden Website noch ihre Datenbank.
 
-- Ausgewähltes Logo: vom Nutzer hochgeladenes PNG, unverändert als `public/qonsul-logo-selected.png` gespeichert (SHA-256 F08B305210555987A5D82D2EB3E9395BA59E685624BF7F3BFE0C227CB77686E1). `app/brand.tsx` zeigt die Originalpixel in einem CSS-Rahmen ohne den übergroßen transparenten Exportrand. Keine Nachzeichnung, Umfärbung oder KI-Rekonstruktion des Logos.
-- Farbbasis aus den deckenden Pixeln des gewählten Logos: Marineblau #012542, mittleres Blau #234F70, Stahlblau #527B99 und Silbergrau #718393; kühles Weiß #F4F6F7 für lesbare Markenflächen. Header, Footer, Diagramm, Schaltflächen und Report sind darauf abgestimmt. Strukturreferenz https://helsing.ai/: bildfüllender Einstieg, Positionierung, großflächige Kompetenzkapitel, Unternehmen und redaktionelle Inhalte. Keine Helsing-Texte, Marken oder Militärbilder übernommen.
-- Inhaltliche Grundlage: Projekt-Chats „Website für QM-Beratung“ und „QONSUL Positionierung und Startplan“. Praxisbeispiele und abstrakte Grafiken sind ausdrücklich illustrativ, keine Kundenreferenzen oder Messdaten. Bild: Jelifer Maniago, https://unsplash.com/photos/a-machine-that-is-cutting-a-piece-of-metal-O5rSp_U-Pa0 (Unsplash-Lizenz), lokal bereitgestellt; keine externe Bildanfrage durch Besucher.
+- Repository: https://github.com/QONSUL-QDR/qonsul.de-website
+- Bestehende Vorschau: https://qonsul-quality-lab.raphael-zajonz.chatgpt.site/
+- Übernommene Funktionsbasis: Sites-Version 7, Commit `c000366a4412631e5545d6f9a09492a7ce276a92`.
+- Initiale GitHub-Version: `v0.1.0`; Produktivfreigabe separat erforderlich.
 
-## Stack und Funktionen
+## Schnellstart
 
-Next.js App Router auf dem durch Sites erzeugten Vinext/Vite-Runtime, React 19, TypeScript, Tailwind 4, Cloudflare Workers, D1 mit Drizzle-Migrationen. Eine Migration erzeugt Reports, kurzlebige Rate-Limit-Zähler und optionale aggregierte Trends.
+Voraussetzungen: Git, Node.js **24.19.0** (siehe `.nvmrc`) und **pnpm 11.19.0**. Immer das vorhandene Lockfile verwenden. Keine Installationsskripte von Abhängigkeiten freischalten, um Fehler zu umgehen.
 
-- Quality Diagnostic mit Produkt, Prozess, Material, Mensch, Messung und Umgebung. Start ohne Login oder Speicherung; sechs Kategorien, maximal drei eigene Ursachen je Kategorie; eigene Ursachen bearbeiten/löschen, generierte Vorschläge aufklappen und entfernen.
-- OpenAI Responses API mit striktem JSON-Schema, 1–2 Hypothesen/Kategorie und separatem KI-Opt-in. `store:false`; offensichtliche sensible Muster werden entfernt, keine Garantie vollständiger Anonymisierung.
-- Ohne Schlüssel sowie bei Fehler/Timeout ausdrücklich gekennzeichneter Regelkatalog, keine vorgetäuschte KI. Externer Aufruf nach 2,5 Sekunden abgebrochen; reale End-to-End-Latenz hängt von Netzwerk, Startzeit und Provider ab, keine 3-Sekunden-Garantie.
-- Direktdownload als druckfähige eigenständige HTML-Datei ohne Kontaktabgabe; im Browser auch als PDF druckbar.
-- Optionaler dauerhafter Report mit Kontaktformular, getrennten Einwilligungen und 30 Tagen Gültigkeit. Zufälliger Schlüssel im URL-Fragment; Datenbank speichert nur SHA-256-Hash. Zugriff per Authorization-Header, keine öffentliche Liste, no-store.
-- Separates CRM-Opt-in: HubSpot-Kontakt nach E-Mail suchen/anlegen und gesamte Analyse als verknüpfte Notiz speichern. Ohne produktive Konfiguration kein externer Versand. Kein E-Mail-Versand implementiert, da der Download-Link die gewünschte Alternative erfüllt.
-- Löschung durch Nutzer über persönlichen Report. Schon übermittelte CRM-Anfragen werden nicht automatisch mitgelöscht: transparenter Hinweis, separate Bearbeitung beim Verantwortlichen erforderlich.
-- Drei Leistungsseiten und drei Fachartikel; native responsive Navigation und reduzierte Animationen bei entsprechender Systemeinstellung.
+```sh
+git clone https://github.com/QONSUL-QDR/qonsul.de-website.git
+cd qonsul.de-website
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm setup:local
+pnpm dev
+```
 
-## Lokal starten
+Die vom Server ausgegebene lokale Adresse öffnen. Unter Windows funktionieren dieselben Befehle in PowerShell; bei blockierter Skriptausführung `pnpm.cmd` verwenden, ohne die Sicherheitsrichtlinie zu ändern.
 
-Node >=22.13, pnpm. `pnpm install`, dann `pnpm dev`.
-
-In dieser Desktop-Umgebung sind Installationsskripte standardmäßig gesperrt. Die vorgefertigten optionalen Binärpakete reichten aus; es wurden keine Build-Skripte freigeschaltet und keine Sicherheitseinstellungen verändert. Der pnpm-Wrapper kann dennoch beim erneuten automatischen Installationscheck abbrechen. In diesem Fall nach abgeschlossener Installation den bereits installierten Befehl `node_modules/.bin/vinext` direkt ausführen, ohne Installationsskripte freizugeben.
-
-Die Vorlage aus `.env.example` als `.dev.vars` übernehmen. Schlüssel bleiben serverseitig und werden nicht eingecheckt. Im Hosting dieselben Werte über Sites setzen. `.openai/hosting.json` enthält nur Projekt-ID und logische Bindings.
-
-Für die lokale D1-Datenbank dieselbe DB-Bindung und State-Verzeichnis wie die Vite-Konfiguration benutzen: `DB`, lokale Platzhalter-ID `00000000-0000-4000-8000-000000000000`, `.wrangler/state`. Migration `drizzle/0000_gigantic_dorian_gray.sql` mit Wrangler lokal ausführen. Hosting wendet die mitgelieferten Migrationen an.
+`setup:local` erstellt eine ignorierte `.dev.vars` mit zufälligen lokalen Sicherheitsschlüsseln und wendet **beide** SQL-Migrationen auf die lokale D1-Datenbank an. Vorhandene Konfiguration wird nicht überschrieben; kein automatischer Reset. Ohne externe Schlüssel funktioniert der gekennzeichnete Regelkatalog. **Ausschließlich fiktive Testdaten verwenden.**
 
 ## Prüfen
 
-`node scripts/check-analysis.mjs`, `pnpm typecheck`, `pnpm test:api` bei laufender lokaler Vorschau, `pnpm build`.
+```sh
+pnpm typecheck
+pnpm test
+pnpm test:integration
+pnpm build
+```
 
-Der API-Test verwendet nur fiktive Daten, erlaubt ausschließlich localhost, verweigert produktiven Modus/aktive KI und löscht den eigenen Report. Er prüft Validierung, Origin-Schutz, Größenlimits, Vorschläge, Einwilligung, Persistenz, Wiederholungen, Zugriffsschutz, HTML-Escaping, Löschung, Seiten und Metadaten. Browser-/Screenshot-Tests wurden nicht beauftragt.
+- `test`: Repository-Hygiene, Asset-Prüfsummen, Analyse-/Reportvalidierung, PDF und synchroner Download.
+- `test:integration`: eigener lokaler Server, 48 API-/Seitenprüfungen, danach Beenden. Verweigert aktive KI/CRM/E-Mail-Zustellung.
+- `build`: Worker unter `dist/server/index.js`, statische Dateien unter `dist/client`.
+- `pdf:sample`: A4-Muster regenerieren. Logo-Werkzeuge siehe [Assets](docs/ASSETS.md).
+- GitHub Actions prüft Einrichtung, Tests und Build. **Kein automatischer Produktiv-Deploy.**
 
-## Vor produktiver Freigabe erforderlich
+## Funktionen
 
-1. Firmenname, Anschrift, Geschäftsführung, HRB und USt-ID sind aus QONSUL-Vorlagen hinterlegt. Geschäftlichen E-Mail-/Telefonkontakt und Datenschutzkontakt in `LEGAL_*`/`PUBLIC_CONTACT_EMAIL` hinterlegen. Rechtliche Texte prüfen lassen; Vorschau-Entwurf ersetzen. Keine Compliance-Zertifizierung wird behauptet.
-2. OpenAI-Schlüssel und `OPENAI_MODEL` nur nach Freigabe bereitstellen. DPA, Datenregionen und Anbieterprotokolle prüfen. Der OpenAI-Developers-Plugin/API-Key-Skill ist in dieser Sitzung nicht verfügbar; Schlüssel wurde nicht erstellt.
-3. HubSpot Private-App-Zugang mit benötigten Kontakt-/Notizrechten und Berechtigungen zur Suche bereitstellen; zuerst mit fiktivem Kontakt in Sandbox prüfen. Keine Live-CRM-Verbindung wurde getestet.
-4. Starkes zufälliges `RATE_LIMIT_SALT` und `MAINTENANCE_SECRET` setzen. Öffentliche Seite erst nach Missbrauchsschutz-Prüfung freigeben; zusätzlicher Bot-Schutz empfohlen.
-5. Täglich `POST /api/maintenance` mit `Authorization: Bearer <MAINTENANCE_SECRET>` durch einen freigegebenen Scheduler aufrufen. Es wurde keine Automation ungefragt angelegt. Abgelaufene Reports werden bereits bei Speicherung bereinigt und sind unabhängig vom Scheduler nicht mehr abrufbar.
-6. CRM-Retention und Widerrufsprozess festlegen. `needs_review`/`sending` in der Report-Tabelle prüfen: nach unsicherem Timeout bewusst kein automatischer Retry, um doppelte CRM-Notizen zu vermeiden. Über `Interne Referenz` in HubSpot abgleichen und manuell beheben.
-7. `PUBLIC_SITE_URL` auf die tatsächliche vertrauenswürdige URL setzen. `PRODUCTION_READY=true` erst nach Abschluss dieser Punkte. Der Schalter erlaubt reale Daten und CRM-Übertragung. Robots bleibt bis zur gezielten SEO-Freigabe auf noindex.
+- Industrielle Positionierung: Quality Engineering, Risk Engineering und Quality Analytics; drei Leistungsseiten und drei Fachartikel.
+- Zwölf Branchenmotive, acht Sekunden Standzeit, manuelle Auswahl/Pause und reduzierte Bewegung.
+- Ishikawa mit Produkt, Prozess, Material, Mensch, Messung und Umgebung; bis zu drei eigene und zwei ergänzte Ursachen je Kategorie.
+- Optional OpenAI Responses API; ohne Schlüssel/bei Fehlern Regeln. Hypothesen sind keine bewiesenen Ursachen.
+- Direkter PDF-Download ohne Kontaktdaten: eine A4-Seite quer, eingebettetes Drucklogo, sechs dezente Wasserzeichen, Firmenname und Website. Bis zu 30 Einträge; lange Texte mit Auslassungszeichen.
+- Gespeicherter vollständiger Report mit getrennten Einwilligungen und 30 Tage gültigem Zugriffsschlüssel.
+- Kontaktformular mit Name, E-Mail, optionalem Telefon/Unternehmen und Nachricht. Speicherung in D1; optional HubSpot und E-Mail-Zusammenfassung über Resend.
+- Löschung und begrenzte Aufbewahrung; keine Analyse-/Werbetracker.
 
-## Primärquellen
+## Struktur
 
-- https://www.itl.nist.gov/div898/handbook/pmc/section3/pmc3.htm
-- https://developers.openai.com/api/docs/guides/structured-outputs
-- https://developers.hubspot.com/docs/api-reference/legacy/crm/activities/notes/guide
-- https://asq.org/quality-resources/fmea
-- https://asq.org/quality-resources/fishbone
-- https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:32016R0679
+| Bereich | Zweck |
+| --- | --- |
+| `app/` | Seiten, Oberfläche und API-Routen |
+| `lib/` | Analyse, PDF/HTML, CRM, E-Mail und Inhalte |
+| `db/`, `drizzle/` | Schema, SQL-Migrationen und Generator-Metadaten |
+| `public/` | Alle Bilder und Logos |
+| `scripts/`, `.github/` | Einrichtung, Prüfungen, CI und PR-Vorlage |
+| `.openai/hosting.json` | Bestehende Sites-Zuordnung und logische DB-Bindung, keine Geheimnisse |
+| `docs/` | Architektur, Konfiguration, Betrieb und Übergabe |
 
-## Inhaltliche Überarbeitung 30.08.2026
+## Weiterarbeiten
 
-DORA und Software-QA aus der Hauptpositionierung entfernt. Neue Kompetenzseiten Quality Engineering, Risk Engineering und Quality Analytics. Regel- und KI-Hypothesen nennen konkrete Prüfschritte, passende Qualitätskennzahlen und benötigte Datentypen. Die optionale Dateninventur wird im Report und in der CRM-Notiz mitgespeichert. Sie ist eine Selbstauskunft, kein Daten-Upload, kein Analyseergebnis und kein Evidence Score. Alte Reports behalten beim Lesen ihre ursprünglichen Kategorien. Keine Datenbankmigration erforderlich.
+[Beiträge](CONTRIBUTING.md) · [Architektur](docs/ARCHITECTURE.md) · [Konfiguration](docs/CONFIGURATION.md) · [Deployment/IONOS](docs/DEPLOYMENT.md) · [Betrieb/Backups](docs/OPERATIONS.md) · [Assets](docs/ASSETS.md) · [Übergabe](docs/HANDOFF.md) · [Änderungen](CHANGELOG.md) · [Sicherheit](SECURITY.md)
 
-## Branchen-Bildfolge 31.08.2026
-
-Zwölf echte Industriefotografien in der vom Betreiber vorgegebenen Prioritätsreihenfolge. Quellen und Urheber stehen in `lib/hero-slides.ts` und werden im Impressum angezeigt. Die Fotografien wurden visuell geprüft; sie sind illustrative Branchenmotive, keine Kundenreferenzen und keine technischen Dokumentationen. Keine generierten Personen oder Maschinen.
-
-Die Bildfolge steht acht Sekunden je Motiv, gefolgt von 1,2 Sekunden Überblendung ohne Zoom oder Kamerafahrt. Alle Branchen lassen sich über ein natives Auswahlfeld sowie Vor/Zurück direkt erreichen. Manuelle Auswahl pausiert bis zum erneuten Start. Bei reduzierter Bewegung bleibt die Bedienung manuell. Hintergrund-Tabs, ein aus dem Blick gescrollter Hero und Texteingaben pausieren automatisch; Datensparmodus startet pausiert. Unterbrechungen beginnen danach mit einer vollen Standzeit.
-
-WebP-Dateien liegen lokal in `public/industries`: 1920 × 1200 für Desktop, 900 × 1400 für Mobilgeräte. Beim ersten Render wird nur das erste Motiv angefordert, anschließend wird nur das nächste Motiv vorab geladen. Bilder werden vor dem Übergang dekodiert; bei einem Ladefehler bleibt das zuletzt sichtbare Bild erhalten. Es gibt keine Bildabrufe bei Drittanbietern durch Website-Besucher. Branding und Social-Preview bleiben unverändert.
+Stack: Next.js App Router/React 19 auf Vinext/Vite, Tailwind CSS, Cloudflare Workers und D1. **Kein Laravel-Projekt und kein reines HTML-Paket.** GitHub Pages oder ein gewöhnlicher IONOS-FTP-Webspace ersetzen die benötigte Laufzeit/Datenbank nicht. Ein Git-Clone enthält bewusst keine realen Kundendaten oder Secrets.

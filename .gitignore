@@ -41,3 +41,16 @@ next-env.d.ts
 /outputs/
 /work/
 /tmp/
+
+# Private runtime data and handoff backups must never be published.
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+*.bundle
+*.key
+*.p12
+*.pfx
+/backups/

@@ -1,0 +1,252 @@
+{
+  "version": 1,
+  "baseline": "c000366a4412631e5545d6f9a09492a7ce276a92",
+  "assets": [
+    {
+      "path": "public/industries/aerospace-mobile.webp",
+      "bytes": 258658,
+      "sha256": "1b307085231de990500081f9fb1d81b334a69cbfa295acbdec5b563ce4883088",
+      "author": "Felix Berger",
+      "source": "https://unsplash.com/photos/a-close-up-view-of-a-jet-engine-PfYaLrYS1Oc",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/aerospace.webp",
+      "bytes": 487746,
+      "sha256": "9ed08bc1010c98d2358ae3448570900403bc2d4870c3100331edfebf867e047a",
+      "author": "Felix Berger",
+      "source": "https://unsplash.com/photos/a-close-up-view-of-a-jet-engine-PfYaLrYS1Oc",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/automotive-mobile.webp",
+      "bytes": 237090,
+      "sha256": "ae2812857a1b14414ad06301212c0a6d19431b6912901d035e43c0a135bf597c",
+      "author": "Simon Kadula",
+      "source": "https://unsplash.com/photos/a-factory-filled-with-lots-of-orange-machines-8gr6bObQLOI",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/automotive.webp",
+      "bytes": 394754,
+      "sha256": "b4c955b2b350d37745c25c74baab52f9b748e0a256dd5741c384b69ef2f96cc9",
+      "author": "Simon Kadula",
+      "source": "https://unsplash.com/photos/a-factory-filled-with-lots-of-orange-machines-8gr6bObQLOI",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/building-mobile.webp",
+      "bytes": 159104,
+      "sha256": "6c4a25422552c9cff481258002abf23e81ac29b9d7ccb5451cd832d9de8be6e8",
+      "author": "Marcus Ganahl",
+      "source": "https://unsplash.com/photos/a-group-of-brown-doors-6KLyD-cUFhc",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/building.webp",
+      "bytes": 240784,
+      "sha256": "c9d455ba10da4b4e1503f23bca5b9cd3bf025945563996c1fdf154ec674f773b",
+      "author": "Marcus Ganahl",
+      "source": "https://unsplash.com/photos/a-group-of-brown-doors-6KLyD-cUFhc",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/chemical-mobile.webp",
+      "bytes": 419648,
+      "sha256": "c60447d968db80771341a0cf3e4c2f8d525ed2f6051d990985cd8d0748817f22",
+      "author": "Hazel J",
+      "source": "https://unsplash.com/photos/vast-industrial-complex-with-pipes-tanks-and-buildings-9KeG7W4cI5U",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/chemical.webp",
+      "bytes": 741516,
+      "sha256": "8514b6a6561d0571d13b6df724c20efa6401935eca23f62c18b347912560f93d",
+      "author": "Hazel J",
+      "source": "https://unsplash.com/photos/vast-industrial-complex-with-pipes-tanks-and-buildings-9KeG7W4cI5U",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/electronics-mobile.webp",
+      "bytes": 183200,
+      "sha256": "e3251cae28efd2669992f1bece781221bd66ebc3cd70fea65358628b16bacb26",
+      "author": "Vishnu Mohanan",
+      "source": "https://unsplash.com/photos/close-up-of-dark-blue-circuit-board-pfR18JNEMv8",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/electronics.webp",
+      "bytes": 298836,
+      "sha256": "89449610b08db327e6d66b924ff97a5725c00a0222cdb591a53614578825cb87",
+      "author": "Vishnu Mohanan",
+      "source": "https://unsplash.com/photos/close-up-of-dark-blue-circuit-board-pfR18JNEMv8",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/energy-mobile.webp",
+      "bytes": 103708,
+      "sha256": "c332fc1d15b81a5371ccd9714bb96994ed36cdadae51b92cead9411fa8d6c090",
+      "author": "Nicholas Doherty",
+      "source": "https://unsplash.com/photos/pONBhDyOFoM",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/energy.webp",
+      "bytes": 163730,
+      "sha256": "926ca8c7c5edf5139e06ed8e96f9e148a7f3ad3b65fa90f86357d95ce947e288",
+      "author": "Nicholas Doherty",
+      "source": "https://unsplash.com/photos/pONBhDyOFoM",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/food-mobile.webp",
+      "bytes": 92516,
+      "sha256": "20255bd5c2d92f5b002e9ed6d9bb913d1700ec13788d7c20e440e4df3b4bb601",
+      "author": "Mina Rad",
+      "source": "https://unsplash.com/photos/bottles-being-filled-on-an-automated-production-line-GiuvVfcNFzY",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/food.webp",
+      "bytes": 119214,
+      "sha256": "29c94f2f61124c9b4ab89bfbe2db776c8896e24d8ecf163e6c77b4139e0df18a",
+      "author": "Mina Rad",
+      "source": "https://unsplash.com/photos/bottles-being-filled-on-an-automated-production-line-GiuvVfcNFzY",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/machinery-mobile.webp",
+      "bytes": 168816,
+      "sha256": "00e8e8513e8d6912d602368cc37a56b58b4503969101b07cc331928db9b6cae8",
+      "author": "Jelifer Maniago",
+      "source": "https://unsplash.com/photos/a-machine-that-is-cutting-a-piece-of-metal-O5rSp_U-Pa0",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/machinery.webp",
+      "bytes": 182388,
+      "sha256": "ba763442967d0ee3a11ef1018cae66617b4523f40f60c0506441328351353144",
+      "author": "Jelifer Maniago",
+      "source": "https://unsplash.com/photos/a-machine-that-is-cutting-a-piece-of-metal-O5rSp_U-Pa0",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/medtech-mobile.webp",
+      "bytes": 109112,
+      "sha256": "770d342a87ab19a8714b848b1a344e449c15de3caf8815981666f5631679a3d3",
+      "author": "Accuray",
+      "source": "https://unsplash.com/photos/medical-radiation-therapy-machine-in-clinic-QTP8UKW_PgI",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/medtech.webp",
+      "bytes": 204650,
+      "sha256": "bfab4bf21116b79119482afad6a5a261c1c55759cb44775d0dfac13819153915",
+      "author": "Accuray",
+      "source": "https://unsplash.com/photos/medical-radiation-therapy-machine-in-clinic-QTP8UKW_PgI",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/pharma-mobile.webp",
+      "bytes": 74118,
+      "sha256": "dcda9011cd33265b019ec63c8c6d4cc8b431273f72b38898de23605bd713e3dc",
+      "author": "Mina Rad",
+      "source": "https://unsplash.com/photos/y6zGvWKU6sE",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/pharma.webp",
+      "bytes": 93826,
+      "sha256": "7ef00f056b3b04388aca4eddaa2c370d9be0b849d1112f19833a6b9fc019cb9b",
+      "author": "Mina Rad",
+      "source": "https://unsplash.com/photos/y6zGvWKU6sE",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/rail-mobile.webp",
+      "bytes": 296770,
+      "sha256": "cf779023cd2b3cdaceb9cc7d19ec99dc5bd51a6ea7d553db3ba9782fc1a55343",
+      "author": "Lois Hill",
+      "source": "https://unsplash.com/photos/overhead-view-of-complex-train-tracks-at-dusk-3pWCaJfy2HA",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/rail.webp",
+      "bytes": 454456,
+      "sha256": "3efef7c2b642ca6ea6010a70adaaec143a53aa63082f5bc14cd289af6e47b305",
+      "author": "Lois Hill",
+      "source": "https://unsplash.com/photos/overhead-view-of-complex-train-tracks-at-dusk-3pWCaJfy2HA",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/semiconductor-mobile.webp",
+      "bytes": 182934,
+      "sha256": "bbfa2ddc71e4f4a1be94f86d141e3ee7914633e3779b7f2057c46b514a574b1a",
+      "author": "Maxence Pira",
+      "source": "https://unsplash.com/photos/a-close-up-of-a-computer-6PYPTe9fesI",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/industries/semiconductor.webp",
+      "bytes": 336530,
+      "sha256": "25bf814d4cdfeaadccef1cc96afc5879e5963f1faeb59d74d0205a2ec419390d",
+      "author": "Maxence Pira",
+      "source": "https://unsplash.com/photos/a-close-up-of-a-computer-6PYPTe9fesI",
+      "license": "https://unsplash.com/license",
+      "purpose": "Illustrative industry photograph"
+    },
+    {
+      "path": "public/og.png",
+      "bytes": 1106272,
+      "sha256": "df1ea47f44381d56c434803acdb471da2f81250e721bc71e3f95193913eadff9",
+      "source": "Existing project social-preview asset; owner confirmation before additional use"
+    },
+    {
+      "path": "public/qonsul-logo-pdf.png",
+      "bytes": 491696,
+      "sha256": "4c39f41335399166a951267e6ed5cf1d07780ed44abbf42b5793237b91d757ad",
+      "source": "QONSUL project asset supplied or derived from supplied logo"
+    },
+    {
+      "path": "public/qonsul-logo-print.jpg",
+      "bytes": 51743,
+      "sha256": "35029fc45990f40e663e5170779c6cb65eb24c0eef4c5ab3b458c6dc74b8b26c",
+      "source": "QONSUL project asset supplied or derived from supplied logo"
+    },
+    {
+      "path": "public/qonsul-logo-selected.png",
+      "bytes": 338334,
+      "sha256": "f08b305210555987a5d82d2eb3e9395ba59e685624bf7f3bfe0c227cb77686e1",
+      "source": "QONSUL project asset supplied or derived from supplied logo"
+    },
+    {
+      "path": "public/qonsul-logo.png",
+      "bytes": 8086,
+      "sha256": "1af973999c91c4dcee5c5f2bfaff145346eccc5fde16835b2517a33d846e6f72",
+      "source": "QONSUL project asset supplied or derived from supplied logo"
+    }
+  ]
+}
