@@ -7,14 +7,14 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
 const probe=createServer();
-await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen(0,'127.0.0.1',resolve);});
+await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen(0,'localhost',resolve);});
 const port=probe.address().port;
 await new Promise(resolve=>probe.close(resolve));
-const base=`http://127.0.0.1:${port}`;
+const base=`http://localhost:${port}`;
 const pkg=JSON.parse(await readFile(path.join(root,'node_modules/vinext/package.json'),'utf8'));
 await mkdir(path.join(root,'.wrangler'),{recursive:true});
 const log=await open(path.join(root,'.wrangler/integration-server.log'),'w');
-const server=spawn(process.execPath,[path.join(root,'node_modules/vinext',pkg.bin.vinext),'dev','--port',String(port),'--host','127.0.0.1'],
+const server=spawn(process.execPath,[path.join(root,'node_modules/vinext',pkg.bin.vinext),'dev','--port',String(port)],
   {cwd:root,stdio:['ignore',log.fd,log.fd],detached:process.platform!=='win32',env:{...process.env,WRANGLER_SEND_METRICS:'false'}});
 let spawnError;
 server.on('error',error=>{spawnError=error;});
