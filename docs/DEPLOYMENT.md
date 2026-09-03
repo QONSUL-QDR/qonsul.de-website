@@ -16,6 +16,28 @@ Die Vorschau bleibt auf https://qonsul-quality-lab.raphael-zajonz.chatgpt.site/ 
 
 Zuordnung in `.openai/hosting.json` erhalten. Kein neues Site-Projekt als Reparatur anlegen.
 
+## Eigenständige Cloudflare-Testumgebung (losgelöst von Sites)
+
+Für einen vom Sites-Projekt unabhängigen Cloudflare-Account (eigene Testumgebung, später eigenständiges Produktivziel) baut `@cloudflare/vite-plugin` bei jedem `pnpm build` automatisch eine vollständige, deploybare `dist/server/wrangler.json`. Ein zusätzliches Wrangler-Konfigurationsfile im Repository-Root ist dafür nicht nötig.
+
+Die D1-Bindung ist standardmäßig weiterhin auf die lokale Sites-Platzhalter-ID gesetzt (`.openai/hosting.json` bleibt unverändert, siehe oben). Für einen eigenständigen Build zwei Umgebungsvariablen vor `pnpm build` setzen:
+
+```sh
+export CF_D1_DATABASE_ID="<uuid aus: wrangler d1 create qonsul-website-d1>"
+export CF_D1_DATABASE_NAME="qonsul-website-d1"   # optional, sonst dieser Standardwert
+pnpm build
+```
+
+Danach in `dist/server` deployen, z. B.:
+
+```sh
+cd dist/server
+CLOUDFLARE_ACCOUNT_ID="<Account-ID>" npx wrangler deploy --dry-run   # erst prüfen
+CLOUDFLARE_ACCOUNT_ID="<Account-ID>" npx wrangler deploy
+```
+
+Secrets (`OPENAI_API_KEY`, `HUBSPOT_ACCESS_TOKEN`, `RESEND_API_KEY`, `MAINTENANCE_SECRET`, `RATE_LIMIT_SALT`, `LEGAL_*` usw.) separat je Umgebung über `wrangler secret put <NAME>` bzw. das Cloudflare-Dashboard setzen, nicht im Repository. Migrationen (`drizzle/0000_*.sql`, `drizzle/0001_*.sql`) auf die neue Datenbank anwenden, bevor der Worker sie anspricht. Dieser Pfad betrifft ausschließlich einen zusätzlichen, eigenständigen Cloudflare-Account/Worker — die bestehende Sites-Vorschau und `.openai/hosting.json` bleiben davon unberührt.
+
 ## qonsul.de / IONOS
 
 Die Registrierung bei IONOS kann bleiben. Dieser Quellstand benötigt **Worker-kompatible Laufzeit und D1**; FTP auf gewöhnlichen Webspace oder GitHub Pages reicht nicht.
