@@ -19,11 +19,21 @@ const server=spawn(process.execPath,[path.join(root,'node_modules/vinext',pkg.bi
 let spawnError;
 server.on('error',error=>{spawnError=error;});
 async function stop(){
-  if(server.pid&&server.exitCode===null){
-    if(process.platform==='win32')spawnSync('taskkill',['/pid',String(server.pid),'/T','/F'],{stdio:'ignore'});
-    else try{process.kill(-server.pid,'SIGTERM');}catch(error){if(error.code!=='ESRCH')throw error;}
-  }
-  await log.close();
+  try{
+    if(server.pid&&server.exitCode===null){
+      if(process.platform==='win32'){
+        const result=spawnSync('taskkill.exe',['/pid',String(server.pid),'/T','/F'],{stdio:'ignore',timeout:10000,windowsHide:true});
+        await delay(100);
+        if(result.status!==0&&server.exitCode===null){
+          // Some restricted shells cannot inspect/terminate a Windows process tree.
+          // Fail clearly instead of hanging indefinitely with an attached child.
+          server.kill('SIGKILL');
+          server.unref();
+          throw new Error('Could not confirm test-server tree cleanup. Run in a local terminal with permission to manage its child processes.');
+        }
+      }else try{process.kill(-server.pid,'SIGTERM');}catch(error){if(error.code!=='ESRCH')throw error;}
+    }
+  }finally{await log.close();}
 }
 try{
   let ready=false;
