@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Existing full-page anchor navigation is intentional. */
 import Brand from '@/app/brand';
 import {services} from '@/lib/content';
 import {notFound} from 'next/navigation';

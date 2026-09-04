@@ -1,0 +1,16 @@
+{
+  "source_event_id": "00000000-0000-4000-8000-000000000002",
+  "submitted_at": "2026-09-03T12:00:00.000Z",
+  "payload_schema_version": "1.0",
+  "contact": {"name": "Ada Lovelace", "email": "ada@example.org"},
+  "company": {"name": "Example GmbH"},
+  "payload": {
+    "problem": "Sporadische Ausfälle bei hoher Temperatur.",
+    "mode": "rules",
+    "available_data": ["Prüf- & Messdaten"],
+    "causes": [
+      {"id": "00000000-0000-4000-8000-000000000003", "category": "Produkt", "text": "Kritische Toleranzkombination", "source": "user", "check": null, "metric": null, "data": []}
+    ]
+  },
+  "consent": {"storage_granted": true, "contact_requested": true, "consent_version": "2026-08-30-v1"}
+}

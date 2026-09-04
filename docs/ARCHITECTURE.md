@@ -11,7 +11,7 @@ Next.js-App-Router-Komponenten laufen über Vinext/Vite auf Cloudflare Workers. 
 1. Browser sammelt Problem/Ursachen. Der PDF-Download wird lokal mit eingebettetem Logo erzeugt; keine Kontaktabgabe erforderlich.
 2. `POST /api/analyze` validiert/begrenzt Anfragen. Optional OpenAI mit getrenntem Opt-in und `store:false`; sonst gekennzeichnete Regeln. Musterbereinigung ist keine garantierte Anonymisierung.
 3. `POST /api/reports` speichert vollständige Analyse/Kontakt nur mit Speicher-Einwilligung. CRM/Trends separat. Zugriffsschlüssel im URL-Fragment, Übertragung zum Lesen/Löschen im Authorization-Header.
-4. `POST /api/contact` persistiert vor optionaler Übermittlung an HubSpot und Resend. Statusfelder machen Teilausfälle sichtbar.
+4. `POST /api/contact` persistiert vor der optionalen, HMAC-signierten Übermittlung an das QONSUL Cockpit und vor Resend. Statusfelder machen Teilausfälle sichtbar.
 5. `POST /api/maintenance` verlangt ein Wartungsgeheimnis. Ablaufgrenzen verhindern Zugriff auch ohne laufenden Scheduler.
 
 | Tabelle | Inhalt / Betrieb |

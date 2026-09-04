@@ -27,9 +27,13 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const syncMotion = () => setReducedMotion(motion.matches);
     const syncVisibility = () => setVisible(!document.hidden);
-    syncMotion(); syncVisibility(); setReady(true);
-    // Respect the browser's optional data-saving preference as well.
-    if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) setPaused(true);
+    let disposed = false;
+    queueMicrotask(() => {
+      if (disposed) return;
+      syncMotion(); syncVisibility(); setReady(true);
+      // Respect the browser's optional data-saving preference as well.
+      if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) setPaused(true);
+    });
     motion.addEventListener('change', syncMotion);
     document.addEventListener('visibilitychange', syncVisibility);
     const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(
@@ -37,6 +41,7 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
     );
     if (section.current) observer?.observe(section.current);
     return () => {
+      disposed = true;
       motion.removeEventListener('change', syncMotion);
       document.removeEventListener('visibilitychange', syncVisibility);
       observer?.disconnect();
@@ -160,7 +165,7 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
       </div>
       <div className="industry-progress" aria-hidden="true"><i key={frame.current}
         className={playing && !pending && frame.previous === null ? 'is-running' : ''}/></div>
-      <span className="industry-status" role="status" aria-live={manualRequest.current || error ? 'polite' : 'off'}>{error || (pending ? 'Motiv wird geladen …' : editing ? 'Bildwechsel während der Eingabe pausiert' : '')}</span>
+      <span className="industry-status" role="status" aria-live={pending || error ? 'polite' : 'off'}>{error || (pending ? 'Motiv wird geladen …' : editing ? 'Bildwechsel während der Eingabe pausiert' : '')}</span>
     </div>
   </section>;
 }

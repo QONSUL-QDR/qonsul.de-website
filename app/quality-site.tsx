@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-html-link-for-pages -- Existing full-page home navigation is intentional. */
 import Brand from '@/app/brand';
 import { useState } from 'react';
 import IshikawaLab from './ishikawa-lab';

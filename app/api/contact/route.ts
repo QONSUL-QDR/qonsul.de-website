@@ -22,21 +22,22 @@ export async function POST(request:Request){
     if(message.length<10)throw new Error('Bitte beschreiben Sie Ihr Anliegen in mindestens 10 Zeichen.');
     if(typeof body.clientToken!=='string'||!/^[a-f0-9-]{36}$/.test(body.clientToken))throw new Error('Ungültiger Anfrage-Schlüssel.');
     const db=rawDb(),clientTokenHash=await hash(body.clientToken);await purgeExpired();
-    const previous=await db.prepare('SELECT crm_status, email_status FROM contact_requests WHERE client_token_hash = ?').bind(clientTokenHash).first<{crm_status:string;email_status:string}>();
-    if(previous)return json({stored:true,crmStatus:previous.crm_status,emailStatus:previous.email_status});
+    const previous=await db.prepare('SELECT id, name, email, phone, company, message, privacy_version, created_at, crm_status, email_status FROM contact_requests WHERE client_token_hash = ?').bind(clientTokenHash).first<{id:string;name:string;email:string;phone:string|null;company:string|null;message:string;privacy_version:string;created_at:number;crm_status:string;email_status:string}>();
+    if(previous){const finalCrm=previous.crm_status==='pending'?await syncContactLead({id:previous.id,name:previous.name,email:previous.email,phone:previous.phone||'',company:previous.company||'',message:previous.message,privacyVersion:previous.privacy_version,submittedAt:previous.created_at}):previous.crm_status;if(setting('PRODUCTION_READY')==='true'&&finalCrm!=='sent')return json({error:'Ihre Anfrage ist sicher vorgemerkt, konnte aber noch nicht vollständig übermittelt werden. Bitte versuchen Sie es erneut.'},503);return json({status:'accepted',reference:previous.id});}
     if(!await rateLimit(request,'contact',6))return json({error:'Zu viele Kontaktanfragen. Bitte versuchen Sie es später erneut.'},429);
     const id=crypto.randomUUID(),now=Date.now();
-    const requestedCrm=setting('PRODUCTION_READY')==='true'&&!!setting('HUBSPOT_ACCESS_TOKEN');
+    const requestedCrm=setting('PRODUCTION_READY')==='true';
     const requestedMail=setting('PRODUCTION_READY')==='true'&&!!setting('RESEND_API_KEY')&&!!setting('CONTACT_FROM_EMAIL')&&!!setting('PUBLIC_CONTACT_EMAIL');
     const crmStatus=requestedCrm?'pending':'not_configured',emailStatus=requestedMail?'pending':'not_configured';
     const retention=Math.min(730,Math.max(30,Number(setting('CONTACT_RETENTION_DAYS'))||90));
     await db.prepare('INSERT INTO contact_requests (id, client_token_hash, name, email, phone, company, message, privacy_version, created_at, expires_at, crm_status, email_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id,clientTokenHash,name,email,phone||null,company||null,message,CONTACT_PRIVACY_VERSION,now,now+retention*86400000,crmStatus,emailStatus).run();
-    const lead:ContactLead={id,name,email,phone,company,message};
-    const [finalCrm,finalMail]=await Promise.all([
+    const lead:ContactLead={id,name,email,phone,company,message,privacyVersion:CONTACT_PRIVACY_VERSION,submittedAt:now};
+    const [finalCrm]=await Promise.all([
       crmStatus==='pending'?syncContactLead(lead):Promise.resolve(crmStatus),
       emailStatus==='pending'?sendContactSummary(lead):Promise.resolve(emailStatus),
     ]);
-    return json({stored:true,crmStatus:finalCrm,emailStatus:finalMail},201);
+    if(setting('PRODUCTION_READY')==='true'&&finalCrm!=='sent')return json({error:'Ihre Anfrage ist sicher vorgemerkt, konnte aber noch nicht vollständig übermittelt werden. Bitte versuchen Sie es erneut.'},503);
+    return json({status:'accepted',reference:id},201);
   }catch(error){return json({error:error instanceof Error?error.message:'Kontaktanfrage konnte nicht gespeichert werden.'},400);}
 }
 

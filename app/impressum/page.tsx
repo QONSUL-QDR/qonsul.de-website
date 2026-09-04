@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- Existing full-page home navigation is intentional. */
 import Brand from '@/app/brand';
 import {heroSlides} from '@/lib/hero-slides';
 import {setting} from '@/lib/server';

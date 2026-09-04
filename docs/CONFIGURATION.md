@@ -8,7 +8,8 @@ Alle Schlüssel ohne Geheimnisse stehen in `.env.example`. Lokal erzeugt `pnpm s
 | `PUBLIC_SITE_URL` | Vertrauenswürdige Basis-URL; lokal http://localhost:3000 |
 | `OPENAI_API_KEY` | Optionales serverseitiges KI-Geheimnis |
 | `OPENAI_MODEL` | Ausgangsstand gpt-4.1-mini |
-| `HUBSPOT_ACCESS_TOKEN` | Kontakt-/Notiz- und Suchzugriff |
+| `QONSUL_COCKPIT_INTAKE_URL` | Server-seitige Basis-URL des QONSUL Cockpits |
+| `QONSUL_COCKPIT_INTAKE_SECRET` | Server-seitiges HMAC-Secret; niemals als `NEXT_PUBLIC_*` setzen |
 | `RESEND_API_KEY` | E-Mail-Versand |
 | `CONTACT_FROM_EMAIL` | Beim Anbieter verifizierter Absender |
 | `PUBLIC_CONTACT_EMAIL` | Empfänger; vorgesehen info@qonsul.de |
@@ -23,7 +24,7 @@ Alle Schlüssel ohne Geheimnisse stehen in `.env.example`. Lokal erzeugt `pnpm s
 
 ## Ausgangsstand
 
-Die bestehende Vorschau verwendet Runtime-Revision 5. Firmenangaben, Empfängeradresse, Basis-URL, Frist, Modell und die beiden Sicherheitsschlüssel sind dort hinterlegt. Für OpenAI, HubSpot und Resend sind bei Übergabe **keine produktiven API-Zugänge konfiguriert**. `PRODUCTION_READY=false`.
+Die bestehende Vorschau verwendet Runtime-Revision 5. Firmenangaben, Empfängeradresse, Basis-URL, Frist, Modell und die Sicherheitsschlüssel sind dort hinterlegt. Für OpenAI, QONSUL Cockpit und Resend sind bei Übergabe **keine produktiven API-Zugänge konfiguriert**. `PRODUCTION_READY=false`.
 
 Konfiguration nur gelesen, nicht verändert. Geheimnisse werden nicht nach GitHub kopiert. Für neues Hosting stellt der Betreiber sie über einen Secret Store bereit.
 
