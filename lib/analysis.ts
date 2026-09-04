@@ -30,7 +30,7 @@ const rules: Record<Category, Rule[]> = {
   Material: [
     ['Material- oder Komponenteneigenschaften könnten zwischen Chargen streuen.', 'Fehler- und Gutteile nach Charge und Lieferant vergleichen. Dabei Prozessbedingungen und Stichprobengröße berücksichtigen.', 'Ausfallrate', ['Chargen & Lieferanten', 'Prüf- & Messdaten']],
     ['Alterung, Feuchteaufnahme oder thermische Vorbelastung könnten das Materialverhalten verändern.', 'Lager- und Einsatzbedingungen mit Materialprüfungen verbinden. Gealterte und unbelastete Muster unter gleichen Bedingungen vergleichen.', 'Ausfallrate', ['Chargen & Lieferanten', 'Umgebungsdaten']],
-    ['Die Wareneingangsprüfung könnte das später ausfallkritische Merkmal nicht erfassen.', 'Prüfplan, Lieferantenspezifikation und Reklamationsbefund abgleichen. Ein geeignetes Prüfmerkmal an Rückstellmustern bewerten.', 'Anforderungsabdeckung', ['Anforderungen & FMEA', 'Reklamationen & Felddaten']]
+    ['Die Wareneingangsprüfung könnte das später besondere Merkmal nicht erfassen.', 'Prüfplan, Lieferantenspezifikation und Reklamationsbefund abgleichen. Ein geeignetes Prüfmerkmal an Rückstellmustern bewerten.', 'Anforderungsabdeckung', ['Anforderungen & FMEA', 'Reklamationen & Felddaten']]
   ],
   Mensch: [
     ['Unklare Zuständigkeiten könnten die Bearbeitung auffälliger Qualitätsdaten verzögern.', 'Den Weg einer Abweichung vom Befund bis zur Maßnahme nachvollziehen. Verantwortung und Rückmeldung gemeinsam klären.', 'Maßnahmenwirksamkeit', ['Änderungshistorie', 'Reklamationen & Felddaten']],
