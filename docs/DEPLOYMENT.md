@@ -38,6 +38,35 @@ CLOUDFLARE_ACCOUNT_ID="<Account-ID>" npx wrangler deploy
 
 Secrets (`OPENAI_API_KEY`, `HUBSPOT_ACCESS_TOKEN`, `RESEND_API_KEY`, `MAINTENANCE_SECRET`, `RATE_LIMIT_SALT`, `LEGAL_*` usw.) separat je Umgebung über `wrangler secret put <NAME>` bzw. das Cloudflare-Dashboard setzen, nicht im Repository. Migrationen (`drizzle/0000_*.sql`, `drizzle/0001_*.sql`) auf die neue Datenbank anwenden, bevor der Worker sie anspricht. Dieser Pfad betrifft ausschließlich einen zusätzlichen, eigenständigen Cloudflare-Account/Worker — die bestehende Sites-Vorschau und `.openai/hosting.json` bleiben davon unberührt.
 
+### Secrets-Checkliste (Testumgebung)
+
+Alle Namen aus `.env.example`, einzeln per `wrangler secret put <NAME>` gesetzt (nicht `--remote`-Bulk, kein Klartext im Repository):
+
+- [ ] `OPENAI_API_KEY` (optional — ohne Schlüssel laufen nur die regelbasierten Vorschläge)
+- [ ] `HUBSPOT_ACCESS_TOKEN`
+- [ ] `RESEND_API_KEY`
+- [ ] `CONTACT_FROM_EMAIL`
+- [ ] `RATE_LIMIT_SALT` (zufällig, nicht wiederverwendet aus lokaler `.dev.vars`)
+- [ ] `MAINTENANCE_SECRET` (zufällig, separat vom Sites-Wert)
+- [ ] `PUBLIC_CONTACT_EMAIL`, `PUBLIC_SITE_URL`
+- [ ] `LEGAL_ENTITY_NAME`, `LEGAL_ADDRESS`, `LEGAL_REPRESENTATIVE`, `LEGAL_PHONE`, `LEGAL_REGISTER`, `LEGAL_VAT_ID`, `LEGAL_EDITORIAL_RESPONSIBLE`, `LEGAL_DISPUTE_RESOLUTION`
+- [ ] `PRODUCTION_READY` bleibt `false`, bis Issue #6 vollständig abgehakt ist
+
+Nach dem Setzen: `wrangler secret list` gegen den Worker der Testumgebung prüfen, ob alle erwarteten Namen vorhanden sind (Werte werden nie angezeigt).
+
+### Wiederherstellungstest (D1-Backup)
+
+`scripts/d1-backup-restore-check.sh` (`pnpm d1:backup-restore-check`) exportiert die D1-Datenbank der Testumgebung, spielt den Export in eine wegwerfbare Restore-Prüf-Datenbank ein, vergleicht Zeilenzahlen je Tabelle und löscht die Prüf-Datenbank danach automatisch wieder. Rührt die Quelldatenbank selbst nicht an.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID="<Account-ID>"
+export CLOUDFLARE_API_TOKEN="<Token mit D1: Edit>"
+export CF_D1_DATABASE_NAME="qonsul-website-d1"
+pnpm d1:backup-restore-check
+```
+
+Der Export landet unter `./backups/d1/` (per `.gitignore` von Commits ausgeschlossen) und muss danach an einen gesicherten Ort außerhalb des Repositorys verschoben und verschlüsselt werden, siehe [Betrieb](OPERATIONS.md). Ein Lauf mit "Restore check PASSED" für alle Tabellen erfüllt den entsprechenden Punkt aus Issue #6 für **diese Testumgebung**; das bestehende Sites-Produktivsystem braucht einen eigenen, separaten Exporttest, da es eine andere D1-Instanz ist.
+
 ## qonsul.de / IONOS
 
 Die Registrierung bei IONOS kann bleiben. Dieser Quellstand benötigt **Worker-kompatible Laufzeit und D1**; FTP auf gewöhnlichen Webspace oder GitHub Pages reicht nicht.
