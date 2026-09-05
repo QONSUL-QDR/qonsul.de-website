@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { AnalyticsClient } from './analytics-client';
 import {setting} from '@/lib/server';
 export function generateMetadata():Metadata { const origin=setting('PUBLIC_SITE_URL')||'http://localhost:3000'; const og=new URL('/og.png',origin).href; return {
   metadataBase: new URL(origin),
@@ -10,4 +11,4 @@ export function generateMetadata():Metadata { const origin=setting('PUBLIC_SITE_
   openGraph: { title: 'QONSUL — Data · Quality · Risk', description: 'Qualität verstehen. Risiken vorausdenken. Datengetriebenes Qualitäts- und Risikomanagement für die Produktentwicklung.', locale: 'de_DE', type: 'website',images:[{url:og,alt:'QONSUL — Qualität verstehen. Risiken vorausdenken.'}] },
   twitter: { card: 'summary_large_image', title: 'QONSUL — Data · Quality · Risk', description: 'Qualität verstehen. Risiken vorausdenken. Datengetriebenes Qualitäts- und Risikomanagement für die Produktentwicklung.',images:[og] },
 };}
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="de"><body>{children}</body></html>; }
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="de"><body><AnalyticsClient />{children}</body></html>; }
