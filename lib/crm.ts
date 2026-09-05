@@ -1,5 +1,6 @@
 import type {Analysis} from './analysis';
 import {deliverIntake,IntakeDeliveryError,type IntakeEvent} from './cockpit-intake-client';
+import {ishikawaSourceCauseId} from './ishikawa-source-id';
 import {rawDb,setting} from './server';
 
 export type DeliveryStatus='sent'|'pending'|'needs_review'|'not_configured'|'not_requested';
@@ -33,10 +34,11 @@ export async function syncLead(lead:IshikawaLead):Promise<DeliveryStatus>{
   const db=rawDb();
   const claimed=await db.prepare("UPDATE reports SET crm_status = 'sending' WHERE id = ? AND crm_status = 'pending' RETURNING id").bind(lead.id).first();
   if(!claimed)return (await db.prepare('SELECT crm_status FROM reports WHERE id = ?').bind(lead.id).first<{crm_status:DeliveryStatus}>())?.crm_status||'needs_review';
+  const causes=await Promise.all(lead.analysis.causes.map(async cause=>({...cause,id:await ishikawaSourceCauseId(lead.id,cause.id)})));
   const result=await send('ishikawa',{
     source_event_id:lead.id,submitted_at:new Date(lead.submittedAt).toISOString(),payload_schema_version:'1.0',
     contact:{name:lead.name,email:lead.email},company:{name:lead.company},
-    payload:{problem:lead.analysis.problem,mode:lead.analysis.mode,available_data:lead.analysis.availableData||[],causes:lead.analysis.causes},
+    payload:{problem:lead.analysis.problem,mode:lead.analysis.mode,available_data:lead.analysis.availableData||[],causes},
     consent:{storage_granted:true,contact_requested:true,consent_version:lead.consentVersion},
   });
   await db.prepare('UPDATE reports SET crm_status = ? WHERE id = ?').bind(result,lead.id).run();

@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {deliverIntake,IntakeDeliveryError,signature} from '../lib/cockpit-intake-client.ts';
+import {ishikawaSourceCauseId} from '../lib/ishikawa-source-id.ts';
 
 const root=path.resolve(fileURLToPath(new URL('..',import.meta.url))),secret='phase3c-local-test-secret-with-at-least-32-bytes';
 const fixture=async name=>JSON.parse(await readFile(path.join(root,'tests/contracts/phase3c',`${name}.json`),'utf8'));
@@ -10,6 +11,10 @@ const contact=await fixture('contact'),ishikawa=await fixture('ishikawa');
 assert.deepEqual(Object.keys(contact).sort(),['company','consent','contact','payload','payload_schema_version','source_event_id','submitted_at'].sort());
 assert.deepEqual(Object.keys(ishikawa.payload).sort(),['available_data','causes','mode','problem'].sort());
 assert.equal(ishikawa.payload.causes.length,1);
+const stableCauseId=await ishikawaSourceCauseId(ishikawa.source_event_id,'cause-0');
+assert.match(stableCauseId,/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+assert.equal(await ishikawaSourceCauseId(ishikawa.source_event_id,'cause-0'),stableCauseId);
+assert.notEqual(await ishikawaSourceCauseId(ishikawa.source_event_id,'cause-1'),stableCauseId);
 
 let attempts=0;const seen=[];
 const mock=async(url,init)=>{attempts++;const body=String(init.body),event=JSON.parse(body),pathName=new URL(url).pathname,timestamp=Number(init.headers['X-Qonsul-Timestamp']);seen.push({event,requestId:init.headers['X-Request-ID']});assert.equal(init.headers['X-Qonsul-Signature'],`v1=${await signature(secret,'POST',pathName,timestamp,event.source_event_id,body)}`);return attempts===1?Response.json({message:'temporary'},{status:503}):Response.json({status:'accepted',reference:'internal-reference'});};
