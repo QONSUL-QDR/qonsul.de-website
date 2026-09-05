@@ -31,12 +31,15 @@ function send(sessionId: string, pageViewId: string, events: AnalyticsEvent[]): 
 export function AnalyticsClient(): null {
   useEffect(() => {
     let enabled = false;
-    let sessionId = sessionStorage.getItem(sessionKey) || id();
+    let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null') as { id: string; touchedAt: number } | null;
+    if (!session || Date.now() - session.touchedAt >= 30 * 60 * 1000) session = { id: id(), touchedAt: Date.now() };
+    let sessionId = session.id;
     let pageViewId = id();
     let activeSince = 0;
     let accumulated = 0;
     const thresholds = new Set<number>();
     const event = (name: EventName, data: Record<string, unknown>): AnalyticsEvent => ({ event_id: id(), name, occurred_at: new Date().toISOString(), data });
+    const persistSession = () => { sessionStorage.setItem(sessionKey, JSON.stringify({ id: sessionId, touchedAt: Date.now() })); };
     const flush = () => {
       if (!enabled) return;
       if (activeSince) { accumulated += Date.now() - activeSince; activeSince = 0; }
@@ -44,11 +47,17 @@ export function AnalyticsClient(): null {
     };
     const start = () => {
       if (enabled) return;
-      enabled = true; sessionStorage.setItem(sessionKey, sessionId); activeSince = document.visibilityState === 'visible' ? Date.now() : 0;
+      enabled = true; persistSession(); activeSince = document.visibilityState === 'visible' ? Date.now() : 0;
       const referrer = referrerHost();
       const touch = attribution();
       const base = { path: path(), ...(referrer ? { referrer_host: referrer } : {}) };
-      send(sessionId, pageViewId, [event('session_start', { ...base, ...(touch ? { attribution: touch } : {}) }), event('page_view', base)]);
+      send(sessionId, pageViewId, [event('session_start', { ...base, ...(touch ? { attribution: touch } : {}) }), event('page_view', { ...base, ...(touch ? { attribution: touch } : {}) })]);
+    };
+    const routeChange = () => {
+      if (!enabled) return;
+      flush(); pageViewId = id(); thresholds.clear(); persistSession();
+      const referrer = referrerHost(); const touch = attribution();
+      send(sessionId, pageViewId, [event('page_view', { path: path(), ...(referrer ? { referrer_host: referrer } : {}), ...(touch ? { attribution: touch } : {}) })]);
     };
     const onConsent = (input: Event) => { if ((input as CustomEvent<{ granted?: boolean }>).detail?.granted === true) start(); };
     const onVisibility = () => { if (!enabled) return; if (document.visibilityState === 'hidden') flush(); else activeSince = Date.now(); };
@@ -64,9 +73,13 @@ export function AnalyticsClient(): null {
       const ctaId = target?.dataset.analyticsCta; const placement = target?.dataset.analyticsPlacement;
       if (ctaId && placement) send(sessionId, pageViewId, [event('cta_click', { cta_id: ctaId, placement, path: path() })]);
     };
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+    history.pushState = function (...args) { originalPushState.apply(this, args); routeChange(); };
+    history.replaceState = function (...args) { originalReplaceState.apply(this, args); routeChange(); };
     window.addEventListener('qonsul:analytics-consent', onConsent);
-    document.addEventListener('visibilitychange', onVisibility); window.addEventListener('pagehide', flush); window.addEventListener('pageshow', () => { if (enabled && document.visibilityState === 'visible') activeSince = Date.now(); }); window.addEventListener('scroll', onScroll, { passive: true }); document.addEventListener('click', onClick);
-    return () => { flush(); window.removeEventListener('qonsul:analytics-consent', onConsent); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', flush); window.removeEventListener('scroll', onScroll); document.removeEventListener('click', onClick); };
+    document.addEventListener('visibilitychange', onVisibility); window.addEventListener('pagehide', flush); window.addEventListener('pageshow', () => { if (enabled && document.visibilityState === 'visible') activeSince = Date.now(); }); window.addEventListener('popstate', routeChange); window.addEventListener('scroll', onScroll, { passive: true }); document.addEventListener('click', onClick);
+    return () => { flush(); history.pushState = originalPushState; history.replaceState = originalReplaceState; window.removeEventListener('qonsul:analytics-consent', onConsent); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', flush); window.removeEventListener('popstate', routeChange); window.removeEventListener('scroll', onScroll); document.removeEventListener('click', onClick); };
   }, []);
 
   return null;
