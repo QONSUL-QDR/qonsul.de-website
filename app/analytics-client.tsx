@@ -3,12 +3,13 @@
 import { useEffect } from 'react';
 import { ANALYTICS_CONSENT_STORAGE_KEY, analyticsConsentGranted } from '@/lib/analytics-consent';
 import { conversionForAnalyticsHook, type Phase3cAnalyticsHook } from '@/lib/analytics-hooks';
+import { ANALYTICS_SESSION_STORAGE_KEY } from '@/lib/analytics-session';
 
-type EventName = 'session_start' | 'page_view' | 'engagement_update' | 'scroll_depth' | 'cta_click' | 'conversion';
+type EventName = 'session_start' | 'page_view' | 'engagement_update' | 'scroll_depth' | 'cta_click' | 'conversion' | 'diagnostic_started' | 'diagnostic_step_completed' | 'diagnostic_completed';
 type AnalyticsEvent = { event_id: string; name: EventName; occurred_at: string; data: Record<string, unknown> };
 
 const endpoint = process.env.NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT;
-const sessionKey = 'qonsul.analytics.session.v1';
+const sessionKey = ANALYTICS_SESSION_STORAGE_KEY;
 
 function id(): string { return crypto.randomUUID(); }
 function path(): string { return window.location.pathname; }
@@ -36,6 +37,7 @@ export function AnalyticsClient(): null {
     let pageViewId = id();
     let activeSince = 0;
     let accumulated = 0;
+    const diagnosticActive = new Map<string, {activeSince:number; accumulated:number}>();
     const thresholds = new Set<number>();
     const conversions = new Set<string>();
     const event = (name: EventName, data: Record<string, unknown>): AnalyticsEvent => ({ event_id: id(), name, occurred_at: new Date().toISOString(), data });
@@ -80,14 +82,30 @@ export function AnalyticsClient(): null {
     };
     const onAnalyticsHook = (input: Event) => {
       if (!enabled) return;
-      const name = (input as CustomEvent<{ name?: Phase3cAnalyticsHook }>).detail?.name;
+      const detail = (input as CustomEvent<{ name?: Phase3cAnalyticsHook; diagnosticFlowId?: string; stepKey?: 'problem'|'causes'|'report'; stepSequence?: number }>).detail;
+      const name = detail?.name;
       if (!name) return;
+      const flowId = detail?.diagnosticFlowId;
+      if (name === 'diagnostic_started' && flowId) {
+        diagnosticActive.set(flowId, {activeSince: document.visibilityState === 'visible' ? Date.now() : 0, accumulated: 0});
+        send(sessionId, pageViewId, [event('diagnostic_started', {diagnostic_flow_id: flowId, path: path()})]);
+        return;
+      }
+      if ((name === 'diagnostic_step_completed' || name === 'diagnostic_completed') && flowId) {
+        const timer = diagnosticActive.get(flowId) ?? {activeSince: 0, accumulated: 0};
+        if (timer.activeSince) { timer.accumulated += Date.now() - timer.activeSince; timer.activeSince = document.visibilityState === 'visible' ? Date.now() : 0; }
+        const duration = Math.min(timer.accumulated, 300000);
+        if (name === 'diagnostic_step_completed' && detail.stepKey && detail.stepSequence) send(sessionId, pageViewId, [event('diagnostic_step_completed', {diagnostic_flow_id: flowId, step_key: detail.stepKey, step_sequence: detail.stepSequence, active_duration_ms: duration})]);
+        if (name === 'diagnostic_completed') { send(sessionId, pageViewId, [event('diagnostic_completed', {diagnostic_flow_id: flowId, active_duration_ms: duration})]); diagnosticActive.delete(flowId); }
+        else diagnosticActive.set(flowId, timer);
+        return;
+      }
       const conversion = conversionForAnalyticsHook(name);
       if (!conversion || conversions.has(name)) return;
       conversions.add(name);
       send(sessionId, pageViewId, [event('conversion', { conversion_type: conversion, path: path() })]);
     };
-    const onVisibility = () => { if (!enabled) return; if (document.visibilityState === 'hidden') flush(); else activeSince = Date.now(); };
+    const onVisibility = () => { if (!enabled) return; if (document.visibilityState === 'hidden') { flush(); diagnosticActive.forEach(timer => { if (timer.activeSince) { timer.accumulated += Date.now() - timer.activeSince; timer.activeSince = 0; } }); } else { activeSince = Date.now(); diagnosticActive.forEach(timer => { timer.activeSince = Date.now(); }); } };
     const onScroll = () => {
       if (!enabled) return;
       const maximum = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);

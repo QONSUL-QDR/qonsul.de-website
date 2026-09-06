@@ -4,8 +4,8 @@ import {ishikawaSourceCauseId} from './ishikawa-source-id';
 import {rawDb,setting} from './server';
 
 export type DeliveryStatus='sent'|'pending'|'needs_review'|'not_configured'|'not_requested';
-export type ContactLead={id:string;name:string;email:string;phone:string;company:string;message:string;privacyVersion:string;submittedAt:number};
-export type IshikawaLead={id:string;name:string;email:string;company:string;analysis:Analysis;consentVersion:string;submittedAt:number};
+export type ContactLead={id:string;name:string;email:string;phone:string;company:string;message:string;privacyVersion:string;submittedAt:number;analyticsSessionId?:string|null;diagnosticFlowId?:string|null};
+export type IshikawaLead={id:string;name:string;email:string;company:string;analysis:Analysis;consentVersion:string;submittedAt:number;analyticsSessionId?:string|null;diagnosticFlowId?:string|null};
 
 function options(){return {baseUrl:setting('QONSUL_COCKPIT_INTAKE_URL'),secret:setting('QONSUL_COCKPIT_INTAKE_SECRET')};}
 export function cockpitConfigured(){const value=options();return !!value.baseUrl&&value.secret.length>=32;}
@@ -24,7 +24,7 @@ export async function syncContactLead(lead:ContactLead):Promise<DeliveryStatus>{
   const result=await send('contact',{
     source_event_id:lead.id,submitted_at:new Date(lead.submittedAt).toISOString(),payload_schema_version:'1.0',
     contact:{name:lead.name,email:lead.email,phone:lead.phone||null},company:{name:lead.company||null},payload:{message:lead.message},
-    consent:{privacy_acknowledged:true,privacy_version:lead.privacyVersion},
+    consent:{privacy_acknowledged:true,privacy_version:lead.privacyVersion},analytics_session_id:lead.analyticsSessionId||null,diagnostic_flow_id:lead.diagnosticFlowId||null,
   });
   await db.prepare('UPDATE contact_requests SET crm_status = ? WHERE id = ?').bind(result,lead.id).run();
   return result;
@@ -39,7 +39,7 @@ export async function syncLead(lead:IshikawaLead):Promise<DeliveryStatus>{
     source_event_id:lead.id,submitted_at:new Date(lead.submittedAt).toISOString(),payload_schema_version:'1.0',
     contact:{name:lead.name,email:lead.email},company:{name:lead.company},
     payload:{problem:lead.analysis.problem,mode:lead.analysis.mode,available_data:lead.analysis.availableData||[],causes},
-    consent:{storage_granted:true,contact_requested:true,consent_version:lead.consentVersion},
+    consent:{storage_granted:true,contact_requested:true,consent_version:lead.consentVersion},analytics_session_id:lead.analyticsSessionId||null,diagnostic_flow_id:lead.diagnosticFlowId||null,
   });
   await db.prepare('UPDATE reports SET crm_status = ? WHERE id = ?').bind(result,lead.id).run();
   return result;

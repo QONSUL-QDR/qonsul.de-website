@@ -15,6 +15,20 @@
       "when": 1788444201166,
       "tag": "0001_contact_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788721018292,
+      "tag": "0002_fast_hulk",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788721127168,
+      "tag": "0003_nosy_vulcan",
+      "breakpoints": true
     }
   ]
 }
