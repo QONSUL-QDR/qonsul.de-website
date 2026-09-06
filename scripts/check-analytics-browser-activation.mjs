@@ -28,6 +28,8 @@ assert.match(client, /analyticsConsentGranted\(window\.localStorage\.getItem/);
 assert.match(client, /sessionStorage\.removeItem\(sessionKey\)/);
 assert.match(client, /qonsul:analytics-hook/);
 assert.match(client, /conversion_type: conversion/);
+assert.match(client, /credentials: 'omit'/);
+assert.doesNotMatch(client, /navigator\.sendBeacon/);
 assert.match(consent, /localStorage\.setItem\(ANALYTICS_CONSENT_STORAGE_KEY, next\)/);
 assert.match(consent, /notifyAnalyticsConsent\(granted\)/);
 

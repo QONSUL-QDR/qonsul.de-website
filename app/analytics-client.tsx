@@ -25,7 +25,6 @@ function send(sessionId: string, pageViewId: string, events: AnalyticsEvent[]): 
   if (!endpoint || events.length === 0) return;
   const body = JSON.stringify({ schema_version: 1, session_id: sessionId, page_view_id: pageViewId, events });
   try {
-    if (navigator.sendBeacon) { navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' })); return; }
     void fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true, credentials: 'omit' });
   } catch { /* Analytics must never affect the website experience. */ }
 }
