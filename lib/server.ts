@@ -15,6 +15,17 @@ export async function readBody(request: Request) {
   try{return JSON.parse(new TextDecoder().decode(bytes)) as Record<string,unknown>;}catch{throw new Error('Ungültiges JSON.');}
 }
 export async function hash(value: string) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(v=>v.toString(16).padStart(2,'0')).join(''); }
+// Constant-time secret comparison: hashes both sides to a fixed-length digest first (so length
+// differences never leak via early return), then XORs every character without branching, so the
+// comparison time never correlates with where the first mismatching byte is. Node's
+// crypto.timingSafeEqual is not available in the Workers runtime without node compat, hence this
+// portable equivalent.
+export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  const [ha, hb] = await Promise.all([hash(a), hash(b)]);
+  let diff = 0;
+  for (let i = 0; i < ha.length; i++) diff |= ha.charCodeAt(i) ^ hb.charCodeAt(i);
+  return diff === 0;
+}
 export async function rateLimit(request: Request, action: string, limit: number) {
   const db=rawDb();
   const window=Math.floor(Date.now()/3600000);
