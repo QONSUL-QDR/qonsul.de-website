@@ -33,7 +33,7 @@ export function AnalyticsClient(): null {
     let enabled = false;
     let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null') as { id: string; touchedAt: number } | null;
     if (!session || Date.now() - session.touchedAt >= 30 * 60 * 1000) session = { id: id(), touchedAt: Date.now() };
-    let sessionId = session.id;
+    const sessionId = session.id;
     let pageViewId = id();
     let activeSince = 0;
     let accumulated = 0;
