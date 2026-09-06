@@ -2,6 +2,21 @@
 
 Status: **READY**. No incident has occurred; this is prepared in advance. Preferred default across every scenario below: **revert to the last known-good Cloudflare Worker version** (Cloudflare keeps prior deployed versions; a version rollback is a single reversible action) rather than pushing an uncoordinated hotfix under pressure. Only fall through to a code hotfix when the specific scenario requires it (e.g. the previous version has the same defect).
 
+## Concrete rollback target reference (fill in once these resources exist — placeholders, not guesses)
+
+| Item | Value |
+|---|---|
+| Production Worker name | `qonsul-de` (confirmed platform decision) |
+| Worker version immediately before cutover | *(record the Cloudflare-assigned version ID here the moment it's deployed, before any public DNS points at it)* |
+| RC1 Worker version (the one actually deployed) | Built from commit `0e67691690d9f2b0f9729dec2681846538a25bbe` — record the resulting Cloudflare version ID once deployed, do not rely on the commit hash alone since it doesn't identify *which deployed version* is live |
+| Production D1 name/ID | *(record once created — see Production Secrets & Bindings Matrix; must not be `qonsul-website-d1` if that is the existing staging database)* |
+| D1 backup immediately before cutover | *(record: filename, sha256, timestamp — produced via the D1 Backup/Restore Runbook, run once against the freshly-initialized production D1 before any real customer data exists in it, as the earliest possible baseline)* |
+| DNS state before cutover | Captured in `docs/launch/dns-cutover-checklist.md` section 1 (no apex A/AAAA, no `www`) — this *is* the rollback target for DNS: reverting means returning to "absent", not to some other value |
+| DNS target state | Cloudflare Custom Domain/Route value for `qonsul-de`, obtained from Cloudflare at cutover time — not yet known |
+| Cockpit independence | Cockpit production (`687a2b8b88c53dc3ce703232b8bd29fd42656c73`) is already live and independent of the Website's own rollback — a Website rollback never requires nor should trigger any Cockpit-side action |
+
+This table has genuine placeholders because the resources don't exist yet (no production Worker or D1 has been created — this session has no Cloudflare credentials to create them). Fill it in as each resource is actually provisioned; do not invent values now.
+
 ## A) New Worker deployment is faulty (crashes, 5xx, fails to boot)
 
 - **Detection:** Worker error rate spike in Cloudflare dashboard/observability, or manual smoke test after deploy fails (see Launch Security Checklist / Post-Launch Monitoring first 15 minutes).
