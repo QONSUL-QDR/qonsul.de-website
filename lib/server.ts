@@ -1,4 +1,6 @@
 import { env } from 'cloudflare:workers';
+
+export { timingSafeEqual } from './timing-safe-equal';
 export function setting(key: string): string { return String((env as unknown as Record<string,unknown>)[key] || process.env[key] || ''); }
 export function rawDb(): D1Database { if(!env.DB) throw new Error('Datenspeicher ist nicht erreichbar.');return env.DB; }
 export function json(data: unknown, status=200) { return Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}}); }
