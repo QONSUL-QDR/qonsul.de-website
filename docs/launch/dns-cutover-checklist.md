@@ -4,7 +4,7 @@ Status: **READY as a checklist. No DNS change has been made.** Current-state val
 
 ## 0. Non-negotiable constraint
 
-**Never touch:** MX, the existing SPF TXT record, DMARC TXT record, or the domain's NS delegation. The cutover only adds/changes records needed to point website traffic (apex and/or `www`) at the new hosting target.
+**Never touch:** MX, the existing SPF TXT record, DMARC TXT record, the domain's NS delegation, or Resend's sending-domain records (`resend._domainkey.qonsul.de` DKIM TXT, and `send.qonsul.de`'s SPF/MX). The cutover only adds/changes records needed to point website traffic (apex and/or `www`) at the new hosting target.
 
 ## 1. Current state (verified this session, live public DNS)
 
@@ -21,8 +21,15 @@ Status: **READY as a checklist. No DNS change has been made.** Current-state val
 | CAA | none (ENODATA) | No Certificate Authority restriction currently in place; any CA can issue for this domain today. Not a blocker; optionally revisit post-launch. |
 | `cockpit.qonsul.de` A | `217.160.0.156` | Existing Cockpit production host (IONOS shared hosting, matches architecture doc). **Not part of this cutover.** |
 | `cockpit-staging.qonsul.de` A | `217.160.0.156` | Same host, different vhost. **Not part of this cutover.** |
+| `resend._domainkey.qonsul.de` TXT | DKIM public key present | Resend sending-domain DKIM, already configured. **Never touch.** |
+| `send.qonsul.de` SPF/MX | `v=spf1 include:amazonses.com ~all` / `feedback-smtp.eu-west-1.amazonses.com` | Resend/Amazon SES bounce subdomain, already configured. **Never touch.** |
 
-**Checked this session — DKIM finding:** `selector1._domainkey.qonsul.de` and `selector2._domainkey.qonsul.de` (the standard Microsoft 365 DKIM selector convention) both return **NXDOMAIN — the records do not exist**, not merely empty. Combined with the `p=none` DMARC policy already noted, this domain currently has **no DKIM signing configured** as far as public DNS shows. This is an existing mail-authentication gap, unrelated to and unaffected by the website cutover — noted here for completeness, not something this cutover should or can fix (no DKIM record to protect, and none should be added as a side effect of a website-only change either).
+**DKIM — corrected finding.** An earlier pass of this document checked only the Microsoft 365 default selector convention (`selector1`/`selector2._domainkey`, both genuinely NXDOMAIN) and concluded DKIM was entirely unconfigured. That was the wrong selector to check: those two names are for Microsoft 365's own outbound mail (the MX path), not for Resend, which is what the Website's contact-form notification email (`RESEND_API_KEY`/`CONTACT_FROM_EMAIL`) actually sends through. Checking Resend's actual selector directly (public DNS, no Cloudflare needed):
+
+- `resend._domainkey.qonsul.de` TXT → **present**, a full DKIM public key record (`p=MIGfMA0GCSqG...`). Resend's sending-domain DKIM **is configured**.
+- `send.qonsul.de` → SPF `v=spf1 include:amazonses.com ~all` and MX `feedback-smtp.eu-west-1.amazonses.com` (priority 10) — the standard Resend/Amazon SES bounce/return-path subdomain, also **already configured**.
+
+So: Microsoft 365 mail (the primary `qonsul.de` MX/mailboxes) has SPF+DMARC but no DKIM found under its own default selectors — that observation itself still stands and is unrelated to Resend. Resend's own sending-domain authentication (DKIM + SPF/MX on the `send.` subdomain) is separately, correctly configured and verified. **Neither `resend._domainkey.qonsul.de` nor `send.qonsul.de` should be touched by the website cutover** — add them to the never-touch list alongside the primary MX/SPF/DMARC records.
 
 **VERIFY BEFORE CUTOVER** (not checked in this session, no tooling access):
 - Exact current TTL of each record type above beyond the SOA's own timers (SOA refresh 28800s/retry 7200s/expire 604800s/minttl 600s were read, but per-record TTLs for MX/TXT/NS were not individually queried).
