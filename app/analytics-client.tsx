@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
+import { ANALYTICS_CONSENT_STORAGE_KEY, analyticsConsentGranted } from '@/lib/analytics-consent';
+import { conversionForAnalyticsHook, type Phase3cAnalyticsHook } from '@/lib/analytics-hooks';
 
-type EventName = 'session_start' | 'page_view' | 'engagement_update' | 'scroll_depth' | 'cta_click';
+type EventName = 'session_start' | 'page_view' | 'engagement_update' | 'scroll_depth' | 'cta_click' | 'conversion';
 type AnalyticsEvent = { event_id: string; name: EventName; occurred_at: string; data: Record<string, unknown> };
 
 const endpoint = process.env.NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT;
@@ -31,15 +33,20 @@ function send(sessionId: string, pageViewId: string, events: AnalyticsEvent[]): 
 export function AnalyticsClient(): null {
   useEffect(() => {
     let enabled = false;
-    let session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null') as { id: string; touchedAt: number } | null;
-    if (!session || Date.now() - session.touchedAt >= 30 * 60 * 1000) session = { id: id(), touchedAt: Date.now() };
-    const sessionId = session.id;
+    let sessionId = '';
     let pageViewId = id();
     let activeSince = 0;
     let accumulated = 0;
     const thresholds = new Set<number>();
+    const conversions = new Set<string>();
     const event = (name: EventName, data: Record<string, unknown>): AnalyticsEvent => ({ event_id: id(), name, occurred_at: new Date().toISOString(), data });
-    const persistSession = () => { sessionStorage.setItem(sessionKey, JSON.stringify({ id: sessionId, touchedAt: Date.now() })); };
+    const beginSession = () => {
+      let session: { id: string; touchedAt: number } | null = null;
+      try { session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null') as { id: string; touchedAt: number } | null; } catch { session = null; }
+      if (!session || Date.now() - session.touchedAt >= 30 * 60 * 1000) session = { id: id(), touchedAt: Date.now() };
+      sessionId = session.id;
+    };
+    const persistSession = () => { if (enabled && sessionId) sessionStorage.setItem(sessionKey, JSON.stringify({ id: sessionId, touchedAt: Date.now() })); };
     const flush = () => {
       if (!enabled) return;
       if (activeSince) { accumulated += Date.now() - activeSince; activeSince = 0; }
@@ -47,7 +54,7 @@ export function AnalyticsClient(): null {
     };
     const start = () => {
       if (enabled) return;
-      enabled = true; persistSession(); activeSince = document.visibilityState === 'visible' ? Date.now() : 0;
+      beginSession(); enabled = true; persistSession(); activeSince = document.visibilityState === 'visible' ? Date.now() : 0;
       const referrer = referrerHost();
       const touch = attribution();
       const base = { path: path(), ...(referrer ? { referrer_host: referrer } : {}) };
@@ -59,7 +66,28 @@ export function AnalyticsClient(): null {
       const referrer = referrerHost(); const touch = attribution();
       send(sessionId, pageViewId, [event('page_view', { path: path(), ...(referrer ? { referrer_host: referrer } : {}), ...(touch ? { attribution: touch } : {}) })]);
     };
-    const onConsent = (input: Event) => { if ((input as CustomEvent<{ granted?: boolean }>).detail?.granted === true) start(); };
+    const stop = () => {
+      enabled = false;
+      activeSince = 0;
+      accumulated = 0;
+      thresholds.clear();
+      conversions.clear();
+      sessionId = '';
+      sessionStorage.removeItem(sessionKey);
+    };
+    const onConsent = (input: Event) => {
+      if ((input as CustomEvent<{ granted?: boolean }>).detail?.granted === true) start();
+      else stop();
+    };
+    const onAnalyticsHook = (input: Event) => {
+      if (!enabled) return;
+      const name = (input as CustomEvent<{ name?: Phase3cAnalyticsHook }>).detail?.name;
+      if (!name) return;
+      const conversion = conversionForAnalyticsHook(name);
+      if (!conversion || conversions.has(name)) return;
+      conversions.add(name);
+      send(sessionId, pageViewId, [event('conversion', { conversion_type: conversion, path: path() })]);
+    };
     const onVisibility = () => { if (!enabled) return; if (document.visibilityState === 'hidden') flush(); else activeSince = Date.now(); };
     const onScroll = () => {
       if (!enabled) return;
@@ -78,8 +106,10 @@ export function AnalyticsClient(): null {
     history.pushState = function (...args) { originalPushState.apply(this, args); routeChange(); };
     history.replaceState = function (...args) { originalReplaceState.apply(this, args); routeChange(); };
     window.addEventListener('qonsul:analytics-consent', onConsent);
+    window.addEventListener('qonsul:analytics-hook', onAnalyticsHook);
     document.addEventListener('visibilitychange', onVisibility); window.addEventListener('pagehide', flush); window.addEventListener('pageshow', () => { if (enabled && document.visibilityState === 'visible') activeSince = Date.now(); }); window.addEventListener('popstate', routeChange); window.addEventListener('scroll', onScroll, { passive: true }); document.addEventListener('click', onClick);
-    return () => { flush(); history.pushState = originalPushState; history.replaceState = originalReplaceState; window.removeEventListener('qonsul:analytics-consent', onConsent); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', flush); window.removeEventListener('popstate', routeChange); window.removeEventListener('scroll', onScroll); document.removeEventListener('click', onClick); };
+    if (analyticsConsentGranted(window.localStorage.getItem(ANALYTICS_CONSENT_STORAGE_KEY))) start();
+    return () => { flush(); history.pushState = originalPushState; history.replaceState = originalReplaceState; window.removeEventListener('qonsul:analytics-consent', onConsent); window.removeEventListener('qonsul:analytics-hook', onAnalyticsHook); document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', flush); window.removeEventListener('popstate', routeChange); window.removeEventListener('scroll', onScroll); document.removeEventListener('click', onClick); };
   }, []);
 
   return null;
