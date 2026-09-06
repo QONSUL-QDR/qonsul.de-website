@@ -19,7 +19,8 @@
     "check:repository": "node scripts/check-repository.mjs",
     "test:api": "node scripts/check-api.mjs",
     "test:pdf": "node scripts/check-ishikawa-pdf.mjs",
-    "pdf:sample": "node scripts/create-pdf-sample.mjs"
+    "pdf:sample": "node scripts/create-pdf-sample.mjs",
+    "d1:backup-restore-check": "bash scripts/d1-backup-restore-check.sh"
   },
   "dependencies": {
     "next": "16.3.4",
