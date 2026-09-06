@@ -57,4 +57,81 @@ The gap: every request — including ones that will be rejected — still reache
 - Any external uptime/monitoring check against `/api/status` or `/` should stay well under the proposed thresholds by construction (infrequent polling); no explicit allowlist is expected to be necessary, but confirm the actual monitoring interval before launch (see Post-Launch Monitoring Checklist) and only add allowlisting if it turns out to collide.
 - None of these thresholds are final production values — they are a starting recommendation to configure and then observe against real traffic in the first days after launch (see Post-Launch Monitoring Checklist), adjusting up or down from log-only signal before any threshold becomes a hard block.
 
+## Ready-to-apply Cloudflare Rate Limiting rule definitions
+
+Written in Cloudflare's rule-expression syntax so they can be pasted directly into a Rate Limiting Rule's "Edit expression" field the moment sufficient permissions exist. Host value shown for production (`qonsul.de`); use the staging Worker's hostname for a staging-first rollout of the same rules.
+
+**Rule 1 — `/api/analyze` (block)**
+```
+Expression: (http.host eq "qonsul.de" and http.request.uri.path eq "/api/analyze" and http.request.method eq "POST")
+Characteristics: IP
+Period: 1 minute
+Requests: 10
+Action: Block
+Mitigation timeout: 60 minutes
+```
+
+**Rule 2 — `/api/contact` (log tier, then challenge tier — two separate rules)**
+```
+Rule 2a (log-only signal):
+Expression: (http.host eq "qonsul.de" and http.request.uri.path eq "/api/contact" and http.request.method eq "POST")
+Characteristics: IP
+Period: 5 minutes
+Requests: 5
+Action: Log
+
+Rule 2b (challenge past a more generous threshold):
+Expression: (http.host eq "qonsul.de" and http.request.uri.path eq "/api/contact" and http.request.method eq "POST")
+Characteristics: IP
+Period: 60 minutes
+Requests: 15
+Action: Managed Challenge
+```
+
+**Rule 3 — `/api/reports` (log-only initially)**
+```
+Expression: (http.host eq "qonsul.de" and http.request.uri.path eq "/api/reports")
+Characteristics: IP
+Period: 5 minutes
+Requests: 15
+Action: Log
+```
+
+**Rule 4 — `/api/maintenance` (backstop only; bearer secret remains primary control)**
+```
+Expression: (http.host eq "qonsul.de" and http.request.uri.path eq "/api/maintenance" and http.request.method eq "POST")
+Characteristics: IP
+Period: 60 minutes
+Requests: 30
+Action: Block
+```
+
+**Explicit exclusion — do not create any rule matching:**
+```
+http.host eq "cockpit.qonsul.de"
+```
+The analytics beacon posts directly to that host, never through the Website Worker/zone — a Website-side rule cannot and should not attempt to govern it.
+
+Apply in staging first (swap `qonsul.de` for the staging Worker's hostname), run the Controlled Edge Test below, then promote the same four rules to production with the host swapped back.
+
+## Controlled Edge Test (run after applying the rules above, staging first)
+
+Non-destructive, no sustained load — a handful of requests per check, not a load test:
+
+| Check | Method | Expected |
+|---|---|---|
+| Normal request | 1 request to each of `/api/analyze`, `/api/contact`, `/api/reports` | 200/normal application response — **PASS** |
+| Legitimate burst | 5 requests to `/api/analyze` within 10 seconds | All 5 succeed (under the 10/minute threshold) — **PASS** |
+| Controlled overage | 12 requests to `/api/analyze` within 10 seconds | Requests 11–12 receive the rate-limit response (429 or Cloudflare's block page) — **RATE LIMITED**, confirms the rule fires |
+| Analytics unaffected | Trigger `page_view`/`scroll`/`cta_click` events (multiple per session) against the analytics endpoint during the above | All analytics events succeed throughout — **UNAFFECTED** (proves rule scoping by `http.host`/path is correct and doesn't collide with Cockpit's separate host) |
+| Contact still functional | One real contact-form submission after the burst test has cooled down (past the rate-limit window) | Submission succeeds — **FUNCTIONAL** |
+| Analyze still functional | One real `/api/analyze` request after the burst test has cooled down | Request succeeds — **FUNCTIONAL** |
+| Reports still functional | One real report save/retrieve after the burst test | Succeeds — **FUNCTIONAL** |
+
+If a Managed Challenge rule is in play (Rule 2b), additionally load `/` in an actual browser once shortly after triggering it and confirm the challenge (if presented at all, since it only fires past 15/hour) doesn't degrade the page for a normal visitor who never approached that threshold.
+
+## Turnstile decision
+
+**`TURNSTILE: NOT REQUIRED FOR INITIAL LAUNCH`** — the four rate-limiting rules above (particularly `/api/contact`'s log→challenge escalation) are judged sufficient as a starting posture. Revisit only if real post-launch signal (see Post-Launch Monitoring Checklist) shows sustained automated abuse past the Managed Challenge tier specifically — at that point Turnstile becomes `RECOMMENDED AS SECONDARY CONTROL`, not before. No CAPTCHA-style friction is introduced pre-emptively.
+
 No rule has been created in Cloudflare. This document is the configuration plan for whoever has Cloudflare access to apply, per environment (staging first, then production with the equivalent origin).
