@@ -2,6 +2,17 @@
 
 Status: **READY (recommendation only — no rule activated)**. Everything below is a proposal to configure once Cloudflare access is available; nothing here has been applied.
 
+## Summary by category (detail in the per-endpoint sections below)
+
+**A) Expensive public website API — `/api/analyze`**
+Highest cost (paid third-party OpenAI call per request when a key is configured). Tightest limit, hard block on breach. See Rule 1.
+
+**B) Contact/report/analyze-adjacent endpoints — `/api/contact`, `/api/reports`, `/api/maintenance`**
+Grouped here as "form/data endpoints" rather than "expensive" — cost per request is low (D1 + at most a downstream email/CRM call after acceptance, not per attempt). Each gets its own tuned threshold (`/api/contact` log→challenge escalation, `/api/reports` log-only, `/api/maintenance` a generous backstop behind its bearer secret). See Rules 2–4. (`/api/analyze` is *not* double-counted here despite being contact-form-adjacent in the UI flow — it stays solely in category A given its distinct cost profile.)
+
+**C) Analytics traffic**
+**Explicitly excluded from all Website-side rate limiting.** The analytics beacon (`app/analytics-client.tsx`) posts directly from the browser to Cockpit's API (`cockpit.qonsul.de`), never through the Website Worker or zone — a Website-side Cloudflare rule cannot see this traffic and must not be written to try. See the dedicated "Analytics browser requests" section and the explicit-exclusion rule below for why no rule should ever match `http.host eq "cockpit.qonsul.de"` from the Website zone.
+
 ## Why an edge layer at all
 
 The app already rate-limits itself in `lib/server.ts`'s `rateLimit()`: an hour-scoped, salted-IP-hash key stored in D1, with these call sites verified in the current code:

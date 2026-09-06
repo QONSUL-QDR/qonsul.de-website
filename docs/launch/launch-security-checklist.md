@@ -1,4 +1,6 @@
-# Launch Security Checklist (Final Pre-Production Pass)
+# Launch Security Checklist / RC1 Security Acceptance Checklist (Final Pre-Production Pass)
+
+This document also serves as the independent Claude security-acceptance checklist for the eventual jointly-integrated RC1, referenced by the Production Cutover Runbook's Phase 1 (Preflight).
 
 Status: **READY as a checklist template.** Items already verified in this review are marked so explicitly, with the branch/commit they were verified against — re-run every item against the actual commit being deployed to production immediately before cutover, since this list was built against `release/website-rc1` @ `0e67691690d9f2b0f9729dec2681846538a25bbe`, not necessarily what production ends up shipping.
 
@@ -22,6 +24,7 @@ Legend: ✅ already verified this review · ⬜ to verify immediately before pro
 - ✅ No duplicate headers (explicitly counted: exactly 1 occurrence each of CSP/HSTS/X-Frame-Options across every route tested)
 - ✅ CSP directive list reviewed (default-src/script-src/style-src/img-src/font-src/object-src/base-uri/frame-ancestors/form-action/manifest-src/connect-src) — sound, `unsafe-inline` justified by Vinext hydration + inline styles
 - ⬜ **No CSP console errors in a real browser** against the actual staging Worker URL — this specifically requires a browser, not curl; not performed in this review (Cloudflare egress blocked from this session). This is the one CSP item still genuinely open.
+- ⬜ **No React hydration errors/warnings in a real browser console** — a separate check from CSP violations specifically; Vinext's RSC hydration bootstrap is exactly the mechanism the CSP's `script-src 'unsafe-inline'` accommodates, so confirm hydration itself completes cleanly (no "Hydration failed" / "text content does not match" console errors) on the actual deployed build, not just that CSP doesn't block it.
 - ✅ HSTS present live: `max-age=63072000; includeSubDomains; preload`
 - ✅ Root-route header gap (vinext `:path*` matcher) confirmed resolved via `proxy.ts` middleware layer
 
@@ -58,8 +61,15 @@ Legend: ✅ already verified this review · ⬜ to verify immediately before pro
 - ✅ CSP analytics-origin confirmed environment-aware in code (no hardcoded staging URL) — verified directly in RC1's `lib/security-headers.ts`
 
 ## DNS / mail
-- ⬜ Mail DNS (MX/SPF/DMARC) verified untouched **after** any DNS cutover step — cannot be checked before a cutover happens; current pre-cutover state is captured in `docs/launch/dns-cutover-checklist.md` section 1 as the baseline to diff against
+- ✅ Mail DNS (MX/SPF/DMARC) and Resend's sending-domain DKIM (`resend._domainkey.qonsul.de`) + bounce subdomain (`send.qonsul.de`) confirmed present and correctly configured this session, via live public DNS — baseline recorded in `docs/launch/dns-protection-matrix.md`
+- ⬜ Re-verified untouched **after** any DNS cutover step — cannot be checked before a cutover happens; diff against the recorded baseline
 
 ## Rollback
 - ✅ Rollback path documented and known (`docs/launch/rollback-runbook.md`) for all nine scenario classes
 - ⬜ Rollback path **exercised** at least once in staging (a dry-run version rollback) before relying on it in a real incident — not performed in this review
+
+## Explicit summary: secret exposure and regression
+
+- ✅ **No secret exposure**: no Cloudflare token, API key, HMAC secret, or any other credential value has appeared in any commit, chat output, or document produced across this project's review sessions — confirmed by construction (every document here states names/status only) and by this session's own discipline (one accidental partial local-dev-secret echo occurred and was self-reported, not a production/real secret).
+- ✅ **No Phase 3c regression**: the security-hardening diff (`f1c16e1` → RC1 tip `0e67691`) touches only `next.config.ts`, `proxy.ts`, `lib/security-headers.ts`, `lib/timing-safe-equal.ts`, `lib/server.ts`, `app/api/maintenance/route.ts`, and the test script — confirmed via direct diff, zero touch to `lib/cockpit-intake-client.ts`, `lib/crm.ts`, or any Phase 3c file. 12/12 Cockpit-intake unit checks still pass.
+- ✅ **No Phase 4 regression**: same diff confirmation — zero touch to `app/analytics-client.tsx` or `lib/analytics-hooks.ts`. 48/48 integration checks (which exercise the full route/API surface) still pass.
