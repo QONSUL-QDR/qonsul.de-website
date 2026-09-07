@@ -37,7 +37,7 @@ export function AnalyticsConsent(): React.ReactNode {
 
   return <aside className="analytics-consent" aria-label="Optionale Website-Analyse">
     <p className="eyebrow">OPTIONALE WEBSITE-ANALYSE</p>
-    <p>Mit Ihrer Zustimmung messen wir ausschließlich pseudonyme Nutzungsereignisse zur Verbesserung dieser Website. Kontakt-, Analyse- und Diagnostic-Einwilligungen werden dafür nicht verwendet.</p>
+    <p>Mit Ihrer Zustimmung messen wir ausschließlich pseudonyme Nutzungsereignisse zur Verbesserung dieser Website – ohne Cookies, ohne Ihre Kontakt- oder Analyseinhalte. Diese Einwilligung ist getrennt von Einwilligungen zum Kontaktformular oder zur Ishikawa-Analyse und wird nicht für andere Zwecke verwendet. Ihre Entscheidung hat keinen Einfluss auf die Nutzbarkeit des Kontaktformulars oder der Ishikawa-Analyse.</p>
     <div className="analytics-consent-actions">
       <button className="button button-green" type="button" onClick={() => choose(true)}>Analyse erlauben</button>
       <button className="quiet-button" type="button" onClick={() => choose(false)}>Nur notwendige Funktionen</button>
