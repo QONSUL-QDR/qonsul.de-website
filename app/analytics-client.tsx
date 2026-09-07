@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { ANALYTICS_CONSENT_STORAGE_KEY, analyticsConsentGranted } from '@/lib/analytics-consent';
 import { conversionForAnalyticsHook, type Phase3cAnalyticsHook } from '@/lib/analytics-hooks';
-import { ANALYTICS_SESSION_STORAGE_KEY } from '@/lib/analytics-session';
+import { ANALYTICS_SESSION_STORAGE_KEY, resolveAnalyticsSession } from '@/lib/analytics-session';
 
 type EventName = 'session_start' | 'page_view' | 'engagement_update' | 'scroll_depth' | 'cta_click' | 'conversion' | 'diagnostic_started' | 'diagnostic_step_completed' | 'diagnostic_completed';
 type AnalyticsEvent = { event_id: string; name: EventName; occurred_at: string; data: Record<string, unknown> };
@@ -34,6 +34,7 @@ export function AnalyticsClient(): null {
   useEffect(() => {
     let enabled = false;
     let sessionId = '';
+    let sessionCreatedAt = 0;
     let pageViewId = id();
     let activeSince = 0;
     let accumulated = 0;
@@ -42,12 +43,11 @@ export function AnalyticsClient(): null {
     const conversions = new Set<string>();
     const event = (name: EventName, data: Record<string, unknown>): AnalyticsEvent => ({ event_id: id(), name, occurred_at: new Date().toISOString(), data });
     const beginSession = () => {
-      let session: { id: string; touchedAt: number } | null = null;
-      try { session = JSON.parse(sessionStorage.getItem(sessionKey) || 'null') as { id: string; touchedAt: number } | null; } catch { session = null; }
-      if (!session || Date.now() - session.touchedAt >= 30 * 60 * 1000) session = { id: id(), touchedAt: Date.now() };
+      const session = resolveAnalyticsSession(sessionStorage.getItem(sessionKey), Date.now(), id);
       sessionId = session.id;
+      sessionCreatedAt = session.createdAt;
     };
-    const persistSession = () => { if (enabled && sessionId) sessionStorage.setItem(sessionKey, JSON.stringify({ id: sessionId, touchedAt: Date.now() })); };
+    const persistSession = () => { if (enabled && sessionId) sessionStorage.setItem(sessionKey, JSON.stringify({ id: sessionId, createdAt: sessionCreatedAt, touchedAt: Date.now() })); };
     const flush = () => {
       if (!enabled) return;
       if (activeSince) { accumulated += Date.now() - activeSince; activeSince = 0; }
@@ -74,6 +74,7 @@ export function AnalyticsClient(): null {
       thresholds.clear();
       conversions.clear();
       sessionId = '';
+      sessionCreatedAt = 0;
       sessionStorage.removeItem(sessionKey);
     };
     const onConsent = (input: Event) => {
