@@ -3,5 +3,5 @@ export type AnalyticsHookDetail={diagnosticFlowId?:string;stepKey?:'problem'|'ca
 export function emitAnalyticsHook(name:Phase3cAnalyticsHook,detail:AnalyticsHookDetail={}){if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('qonsul:analytics-hook',{detail:{name,...detail}}));}
 
 export function conversionForAnalyticsHook(name: Phase3cAnalyticsHook): 'website_goal' | null {
-  return name === 'contact_form_accepted' || name === 'ishikawa_accepted' ? 'website_goal' : null;
+  return name === 'contact_form_accepted' || name === 'ishikawa_accepted' || name === 'diagnostic_completed' ? 'website_goal' : null;
 }
