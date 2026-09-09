@@ -10,11 +10,15 @@ export type IshikawaLead={id:string;name:string;email:string;company:string;anal
 function options(){return {baseUrl:setting('QONSUL_COCKPIT_INTAKE_URL'),secret:setting('QONSUL_COCKPIT_INTAKE_SECRET')};}
 export function cockpitConfigured(){const value=options();return !!value.baseUrl&&value.secret.length>=32;}
 
+function auditDelivery(source:'contact'|'ishikawa',sourceEventId:string,outcome:DeliveryStatus,details:{httpStatus?:number|null;kind?:string}={}){
+  console.info(JSON.stringify({event:'qonsul.website_intake_delivery',source,source_event_id:sourceEventId,target_path:`/api/v1/intake/${source}`,http_status:details.httpStatus??null,delivery_status:outcome,retry_classification:outcome==='pending'?'transient':'not_retryable',failure_kind:details.kind??null}));
+}
+
 async function send(source:'contact'|'ishikawa',event:IntakeEvent):Promise<DeliveryStatus>{
-  if(setting('PRODUCTION_READY')!=='true')return 'not_configured';
-  if(!cockpitConfigured())return 'needs_review';
-  try{await deliverIntake(source,event,options());return 'sent';}
-  catch(error){return error instanceof IntakeDeliveryError&&error.transient?'pending':'needs_review';}
+  if(setting('PRODUCTION_READY')!=='true'){auditDelivery(source,event.source_event_id,'not_configured');return 'not_configured';}
+  if(!cockpitConfigured()){auditDelivery(source,event.source_event_id,'needs_review',{kind:'configuration'});return 'needs_review';}
+  try{const delivery=await deliverIntake(source,event,options());auditDelivery(source,event.source_event_id,'sent',{httpStatus:delivery.httpStatus});return 'sent';}
+  catch(error){const outcome=error instanceof IntakeDeliveryError&&error.transient?'pending':'needs_review';auditDelivery(source,event.source_event_id,outcome,{httpStatus:error instanceof IntakeDeliveryError?error.httpStatus:null,kind:error instanceof IntakeDeliveryError?error.kind:'transport'});return outcome;}
 }
 
 export async function syncContactLead(lead:ContactLead):Promise<DeliveryStatus>{

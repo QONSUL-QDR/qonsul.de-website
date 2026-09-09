@@ -1,10 +1,13 @@
 export type IntakeSource='contact'|'ishikawa';
 export type IntakeEvent={source_event_id:string;submitted_at:string;payload_schema_version:'1.0';[key:string]:unknown};
-export type IntakeDelivery={status:'accepted';reference:string};
+export type IntakeDelivery={status:'accepted';reference:string;httpStatus:number};
+export type IntakeFailureKind='transport'|'authentication'|'validation'|'rate_limited'|'server'|'response';
 
 export class IntakeDeliveryError extends Error{
   readonly transient:boolean;
-  constructor(message:string,transient:boolean){super(message);this.name='IntakeDeliveryError';this.transient=transient;}
+  readonly kind:IntakeFailureKind;
+  readonly httpStatus:number|null;
+  constructor(message:string,transient:boolean,kind:IntakeFailureKind, httpStatus:number|null=null){super(message);this.name='IntakeDeliveryError';this.transient=transient;this.kind=kind;this.httpStatus=httpStatus;}
 }
 
 const bytes=(value:string)=>new TextEncoder().encode(value);
@@ -17,22 +20,25 @@ export async function signature(secret:string,method:string,path:string,timestam
 }
 
 export async function deliverIntake(source:IntakeSource,event:IntakeEvent,options:{baseUrl:string;secret:string;fetchImpl?:typeof fetch;attempts?:number;timeoutMs?:number}):Promise<IntakeDelivery>{
-  if(options.secret.length<32)throw new IntakeDeliveryError('Intake authentication is not configured.',false);
-  const base=new URL(options.baseUrl);if(base.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(base.hostname))throw new IntakeDeliveryError('Intake URL must use HTTPS.',false);
+  if(options.secret.length<32)throw new IntakeDeliveryError('Intake authentication is not configured.',false,'authentication');
+  const base=new URL(options.baseUrl);if(base.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(base.hostname))throw new IntakeDeliveryError('Intake URL must use HTTPS.',false,'response');
   const path=`/api/v1/intake/${source}`,url=new URL(path,base),body=JSON.stringify(event),requestId=crypto.randomUUID();
   const execute=options.fetchImpl||fetch,attempts=Math.min(3,Math.max(1,options.attempts||3)),timeoutMs=Math.min(10000,Math.max(500,options.timeoutMs||4000));
   for(let attempt=0;attempt<attempts;attempt++){
     const timestamp=Math.floor(Date.now()/1000);
     try{
       const response=await execute(url,{method:'POST',signal:AbortSignal.timeout(timeoutMs),headers:{'Content-Type':'application/json','Accept':'application/json','X-Qonsul-Timestamp':String(timestamp),'X-Qonsul-Signature':`v1=${await signature(options.secret,'POST',path,timestamp,event.source_event_id,body)}`,'X-Request-ID':requestId},body});
-      if(response.ok){const result=await response.json() as Partial<IntakeDelivery>;if(result.status==='accepted'&&typeof result.reference==='string')return result as IntakeDelivery;throw new IntakeDeliveryError('Unexpected intake response.',false);}
-      if(response.status<500&&response.status!==429)throw new IntakeDeliveryError('Intake request was rejected.',false);
-      if(attempt===attempts-1)throw new IntakeDeliveryError('Intake service is temporarily unavailable.',true);
+      if(response.ok){const result=await response.json() as Partial<IntakeDelivery>;if(result.status==='accepted'&&typeof result.reference==='string')return {...result,httpStatus:response.status} as IntakeDelivery;throw new IntakeDeliveryError('Unexpected intake response.',false,'response',response.status);}
+      if(response.status<500&&response.status!==429){
+        const kind=response.status===401||response.status===403?'authentication':response.status===400||response.status===413||response.status===415||response.status===422?'validation':'response';
+        throw new IntakeDeliveryError('Intake request was rejected.',false,kind,response.status);
+      }
+      if(attempt===attempts-1)throw new IntakeDeliveryError('Intake service is temporarily unavailable.',true,response.status===429?'rate_limited':'server',response.status);
     }catch(error){
       if(error instanceof IntakeDeliveryError&&!error.transient)throw error;
-      if(attempt===attempts-1)throw error instanceof IntakeDeliveryError?error:new IntakeDeliveryError('Intake service is temporarily unavailable.',true);
+      if(attempt===attempts-1)throw error instanceof IntakeDeliveryError?error:new IntakeDeliveryError('Intake service is temporarily unavailable.',true,'transport');
     }
     await new Promise(resolve=>setTimeout(resolve,150*(attempt+1)));
   }
-  throw new IntakeDeliveryError('Intake service is temporarily unavailable.',true);
+  throw new IntakeDeliveryError('Intake service is temporarily unavailable.',true,'transport');
 }
