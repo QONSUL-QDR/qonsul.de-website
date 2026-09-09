@@ -7,6 +7,7 @@ async function request(path,body,headers={}){const r=await fetch(base+path,{meth
 const seed={problem:'Sporadische Ausfälle bei hoher Temperatur <script>alert(1)</script>',availableData:['Prüf- & Messdaten','Umgebungsdaten'],causes:[{id:'test-own',category:'Produkt',text:'Ausfälle betreffen eine bestimmte Baugruppe',source:'user'}]};
 const status=await (await fetch(base+'/api/status')).json();assert.equal(status.productionReady,false,'Only test in private preview mode');assert.equal(status.ai,false,'Do not spend API credits in this test');
 assert.equal(status.contactReady,false,'Do not send external CRM or email messages in preview tests');
+assert.match(status.commit,/^[0-9a-f]{40}$|^unknown$/,'Status exposes a full commit SHA (or an explicit unknown) for deployment-drift verification');
 const badOrigin=await request('/api/analyze',seed,{Origin:'https://evil.example'});check([400,403].includes(badOrigin.status),'Cross-origin analysis rejected');
 const invalid=await request('/api/analyze',{problem:'bad',causes:[]});check(invalid.status===400,'Short problem rejected');
 const malformed=await request('/api/analyze',{...seed,causes:[{category:'__proto__',text:'Invalid category',source:'user'}]});check(malformed.status===400,'Unknown category rejected');

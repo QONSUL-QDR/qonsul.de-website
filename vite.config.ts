@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
@@ -6,6 +7,30 @@ import hostingConfig from './.openai/hosting.json';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
+
+// Deployment-drift identifier: bakes the exact commit a build was produced
+// from into the compiled output at build time (esbuild `define`, below), so
+// it survives whatever deploys the resulting bundle afterwards (wrangler,
+// an OpenAI Sites-managed pipeline, etc.) without depending on that pipeline
+// remembering to set an env var. `GET /api/status` then exposes it — a
+// non-secret value, never a source of truth for authorization — so that
+// given only the Worker URL, the running commit can be confirmed rather
+// than assumed. A few hosted CI checkouts provide the commit via env instead
+// of a usable `.git`; those are tried first, then a local `git rev-parse`,
+// and finally 'unknown' rather than ever failing the build.
+function resolveBuildCommitSha(): string {
+  const fromEnv =
+    process.env.SOURCE_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || process.env.GITHUB_SHA;
+  if (fromEnv) return fromEnv;
+  try {
+    return execSync('git rev-parse HEAD', { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'unknown';
+  }
+}
+const buildCommitSha = resolveBuildCommitSha();
 
 const { d1, r2 } = hostingConfig;
 
@@ -58,6 +83,7 @@ export default defineConfig(async () => {
 
   return {
     css: { postcss: { plugins: [tailwindcss()] } },
+    define: { __QONSUL_BUILD_COMMIT_SHA__: JSON.stringify(buildCommitSha) },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,

@@ -14,7 +14,7 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "setup:local": "node scripts/setup-local.mjs",
-    "test": "node scripts/check-repository.mjs && node scripts/check-analysis.mjs && node scripts/check-ishikawa-pdf.mjs && node scripts/check-cockpit-intake.mjs && node --experimental-strip-types scripts/check-analytics-browser-activation.mjs && node --experimental-strip-types scripts/check-security-hardening.mjs",
+    "test": "node scripts/check-repository.mjs && node scripts/check-analysis.mjs && node scripts/check-ishikawa-pdf.mjs && node scripts/check-cockpit-intake.mjs && node --experimental-strip-types scripts/check-analytics-browser-activation.mjs && node --experimental-strip-types scripts/check-security-hardening.mjs && node --experimental-strip-types scripts/check-build-info.mjs",
     "test:integration": "node scripts/test-local.mjs",
     "check:repository": "node scripts/check-repository.mjs",
     "test:api": "node scripts/check-api.mjs",
