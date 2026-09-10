@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {diagnosticEvent,DIAGNOSTIC_PROCESSING_CONSENT_VERSION} from '../lib/diagnostic-contract.ts';
 import {deliverDiagnostic,requestDiagnosticConsultation,DiagnosticDeliveryError} from '../lib/diagnostic-intake-client.ts';
-import {invalidateDraftSubmissionId,submissionIdForSave} from '../lib/diagnostic-submission-lifecycle.ts';
+import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
 
 const id='11111111-1111-4111-8111-111111111111';
 const analysis={problem:'Synthetisches Qualitätsproblem für den getrennten Diagnostic-Contract.',mode:'rules',availableData:['Prüf- & Messdaten'],causes:[
@@ -41,6 +41,16 @@ for (const mutation of ['failed retry', 'evidence', 'cause add/remove', 'hypothe
   assert.notEqual(submissionIdForSave(invalidateDraftSubmissionId(), createSubmissionId), stale, `${mutation} receives a fresh logical submission ID`);
 }
 
+const successStates=[];
+assert.equal(await withSavingState(value=>successStates.push(value),async()=>'saved'),'saved');
+assert.deepEqual(successStates,[true,false],'successful submit ends saving state');
+const failureStates=[];
+await assert.rejects(()=>withSavingState(value=>failureStates.push(value),async()=>{throw new Error('rejected');}));
+assert.deepEqual(failureStates,[true,false],'failed submit ends saving state');
+const timeoutStates=[];
+await assert.rejects(()=>withSavingState(value=>timeoutStates.push(value),async()=>await new Promise((_,reject)=>setTimeout(()=>reject(Object.assign(new Error('Timed out'),{name:'TimeoutError'})),5))),error=>error?.name==='TimeoutError');
+assert.deepEqual(timeoutStates,[true,false],'timeout ends saving state');
+
 const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'pending_review',diagnostic_id:id},{status:201})});
 assert.deepEqual(consultation,{status:'pending_review',diagnosticId:id});
 await assert.rejects(()=>deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret:'short',fetchImpl}),DiagnosticDeliveryError);
@@ -52,8 +62,15 @@ assert.match(diagnosticUi,/function invalidateDraftSubmission\(\) \{ submissionI
 for(const marker of ['invalidateDraftSubmission(); step(\'causes\'', 'invalidateDraftSubmission(); const next = suggestRules', 'invalidateDraftSubmission(); setCauses', 'invalidateDraftSubmission(); setAvailableData', 'name="diagnosticConsent" type="checkbox" required onChange={invalidateDraftSubmission}', 'name="demoConfirmed" type="checkbox" required onChange={invalidateDraftSubmission}'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 assert.doesNotMatch(diagnosticUi,/\/api\/v1\/intake\/ishikawa/);
 assert.match(diagnosticUi,/lead-content diagnostic-result/);
+assert.match(diagnosticUi,/lead-form diagnostic-content-wrap/);
+assert.match(diagnosticUi,/lead-content diagnostic-result diagnostic-content-wrap/);
+assert.match(diagnosticUi,/await withSavingState\(setBusy/);
+assert.match(diagnosticUi,/catch \{ setError\(diagnosticSaveError\); \}/);
 assert.match(diagnosticUi,/Ihre Beratungsanfrage wurde übermittelt\./);
 assert.match(diagnosticUi,/Die Beratungsanfrage konnte nicht übermittelt werden\. Bitte versuchen Sie es erneut\./);
 const diagnosticCss=await readFile(new URL('../app/globals.css',import.meta.url),'utf8');
-assert.match(diagnosticCss,/\.diagnostic-result\{margin:0 30px 25px;padding:25px;border:1px solid #c7d4df;background:#e6edf2\}/);
-console.log('PASS 27 Quality Diagnostic contract, HMAC isolation, immutable submission lifecycle, domain separation, retry and accepted cause-map UI checks.');
+assert.match(diagnosticCss,/\.diagnostic-content-wrap\{margin:0 30px 25px;padding:25px\}/);
+assert.match(diagnosticCss,/\.capture,\.diagnostic-content-wrap\{margin:0 17px 20px;padding:20px 15px\}/);
+assert.match(diagnosticCss,/\.diagnostic-content-wrap input:not\(\[type=checkbox\]\),\.diagnostic-content-wrap select\{padding:14px\}/);
+assert.match(diagnosticCss,/\.diagnostic-content-wrap \.button\{padding:14px 22px\}/);
+console.log('PASS 30 Quality Diagnostic contract, HMAC isolation, immutable submission lifecycle, settled save state, spacing, domain separation, retry and accepted cause-map UI checks.');
