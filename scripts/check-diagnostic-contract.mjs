@@ -38,4 +38,9 @@ for(const marker of ['fish-layout','fish-lines','fish-problem','AUSGANGSPUNKT','
 assert.match(diagnosticUi,/cause\.source === 'user' \? 'Eigene Beobachtung' : 'Ergänzende Hypothese/);
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostics'/);
 assert.doesNotMatch(diagnosticUi,/\/api\/v1\/intake\/ishikawa/);
-console.log('PASS 15 Quality Diagnostic contract, HMAC isolation, domain separation, retry and accepted cause-map UI checks.');
+assert.match(diagnosticUi,/lead-content diagnostic-result/);
+assert.match(diagnosticUi,/Ihre Beratungsanfrage wurde übermittelt\./);
+assert.match(diagnosticUi,/Die Beratungsanfrage konnte nicht übermittelt werden\. Bitte versuchen Sie es erneut\./);
+const diagnosticCss=await readFile(new URL('../app/globals.css',import.meta.url),'utf8');
+assert.match(diagnosticCss,/\.diagnostic-result\{margin:0 30px 25px;padding:25px;border:1px solid #c7d4df;background:#e6edf2\}/);
+console.log('PASS 19 Quality Diagnostic contract, HMAC isolation, domain separation, retry and accepted cause-map UI checks.');

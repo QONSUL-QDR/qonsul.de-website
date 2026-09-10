@@ -48,6 +48,6 @@ export async function PUT(request: Request) {
     return json({ status: result.status, diagnosticId: result.diagnosticId }, result.status === 'pending' ? 202 : 201);
   } catch (error) {
     const status = error instanceof DiagnosticDeliveryError && error.transient ? 503 : error instanceof DiagnosticDeliveryError ? (error.httpStatus || 422) : 400;
-    return json({ error: error instanceof Error ? error.message : 'Beratungsanfrage konnte nicht übermittelt werden.' }, status);
+    return json({ error: 'Die Beratungsanfrage konnte nicht übermittelt werden. Bitte versuchen Sie es erneut.' }, status);
   }
 }
