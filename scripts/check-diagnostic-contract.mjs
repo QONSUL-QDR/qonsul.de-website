@@ -25,6 +25,11 @@ assert.equal(new URL(seen[0].url).pathname,'/api/v1/intake/diagnostic');
 assert.equal(seen[0].init.headers['X-Qonsul-Signature'].startsWith('v1='),true);
 assert.equal('credentials' in seen[0].init,false);
 
+await assert.rejects(
+  () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({errors:{idempotency_key:['conflict']}},{status:422})}),
+  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 422 && error.trace?.code === 'idempotency_conflict' && error.trace.fields.join(',') === 'idempotency_key',
+);
+
 const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'pending_review',diagnostic_id:id},{status:201})});
 assert.deepEqual(consultation,{status:'pending_review',diagnosticId:id});
 await assert.rejects(()=>deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret:'short',fetchImpl}),DiagnosticDeliveryError);

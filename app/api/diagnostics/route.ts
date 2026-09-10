@@ -6,6 +6,15 @@ import { CONTACT_PRIVACY_VERSION } from '@/lib/contact';
 
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const configured = () => ({ baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET') });
+const customerError = 'Die Analyse konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.';
+
+function diagnosticError(error: unknown) {
+  const status = error instanceof DiagnosticDeliveryError && error.transient ? 503 : error instanceof DiagnosticDeliveryError ? (error.httpStatus || 422) : 400;
+  const body: { error: string; retryWithNewSubmissionId?: true; trace?: import('@/lib/diagnostic-intake-client').DiagnosticRejectionTrace } = { error: customerError };
+  if (error instanceof DiagnosticDeliveryError && error.trace?.code === 'idempotency_conflict') body.retryWithNewSubmissionId = true;
+  if (setting('QONSUL_DIAGNOSTIC_TRACE') === 'true' && error instanceof DiagnosticDeliveryError && error.trace) body.trace = error.trace;
+  return json(body, status);
+}
 
 export async function POST(request: Request) {
   try {
@@ -19,10 +28,7 @@ export async function POST(request: Request) {
     const analyticsSessionId = uuid(body.analyticsSessionId) ? body.analyticsSessionId : null;
     const result = await deliverDiagnostic(diagnosticEvent(body.submissionId, analysis, analyticsSessionId), configured());
     return json({ status: 'accepted', diagnostic: result }, result.replayed ? 200 : 201);
-  } catch (error) {
-    const status = error instanceof DiagnosticDeliveryError && error.transient ? 503 : error instanceof DiagnosticDeliveryError ? (error.httpStatus || 422) : 400;
-    return json({ error: error instanceof Error ? error.message : 'Diagnostic konnte nicht gespeichert werden.' }, status);
-  }
+  } catch (error) { return diagnosticError(error); }
 }
 
 export async function PUT(request: Request) {

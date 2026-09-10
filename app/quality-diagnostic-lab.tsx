@@ -65,7 +65,8 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
         submissionId: submissionId.current, analysis, diagnosticConsent: form.get('diagnosticConsent') === 'on', consentVersion: DIAGNOSTIC_PROCESSING_CONSENT_VERSION,
         demoConfirmed: form.get('demoConfirmed') === 'on', website: form.get('website'), analyticsSessionId: currentAnalyticsSessionId(),
       }) });
-      const result = await response.json() as { error?: string; diagnostic?: DiagnosticResult };
+      const result = await response.json() as { error?: string; diagnostic?: DiagnosticResult; retryWithNewSubmissionId?: boolean };
+      if (result.retryWithNewSubmissionId === true) submissionId.current = '';
       if (!response.ok || !result.diagnostic) throw new Error(result.error || 'Diagnostic konnte nicht gespeichert werden.');
       step('report', 3); emitAnalyticsHook('diagnostic_completed', { diagnosticFlowId: flowId.current }); setSaved(result.diagnostic);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Diagnostic konnte nicht gespeichert werden.'); } finally { setBusy(false); }
