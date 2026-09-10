@@ -65,7 +65,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     event.preventDefault(); setError('');
     await withSavingState(setBusy, async () => {
       try {
-        submissionId.current = submissionIdForSave(submissionId.current, crypto.randomUUID);
+        submissionId.current = submissionIdForSave(submissionId.current, () => crypto.randomUUID());
         const form = new FormData(event.currentTarget);
         const response = await fetch('/api/diagnostics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(25000), body: JSON.stringify({
           submissionId: submissionId.current, analysis, diagnosticConsent: form.get('diagnosticConsent') === 'on', consentVersion: DIAGNOSTIC_PROCESSING_CONSENT_VERSION,

@@ -60,6 +60,8 @@ assert.match(diagnosticUi,/cause\.source === 'user' \? 'Eigene Beobachtung' : 'E
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostics'/);
 assert.match(diagnosticUi,/function invalidateDraftSubmission\(\) \{ submissionId\.current = invalidateDraftSubmissionId\(\); \}/);
 assert.match(diagnosticUi,/document\.getElementById\('analyse'\)\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/,'Hero launch navigates to the Quality Diagnostic cause map');
+assert.match(diagnosticUi,/submissionIdForSave\(submissionId\.current, \(\) => crypto\.randomUUID\(\)\)/,'Browser UUID generation remains bound through a callback wrapper');
+assert.doesNotMatch(diagnosticUi,/submissionIdForSave\(submissionId\.current, crypto\.randomUUID\)/,'Browser crypto.randomUUID must not be passed unbound');
 for(const marker of ['invalidateDraftSubmission(); step(\'causes\'', 'invalidateDraftSubmission(); const next = suggestRules', 'invalidateDraftSubmission(); setCauses', 'invalidateDraftSubmission(); setAvailableData', 'name="diagnosticConsent" type="checkbox" required onChange={invalidateDraftSubmission}', 'name="demoConfirmed" type="checkbox" required onChange={invalidateDraftSubmission}'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 assert.doesNotMatch(diagnosticUi,/\/api\/v1\/intake\/ishikawa/);
 assert.match(diagnosticUi,/lead-content diagnostic-result/);
