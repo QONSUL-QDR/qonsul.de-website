@@ -29,7 +29,10 @@ export function diagnosticEvent(sourceEventId: string, analysis: Analysis, analy
   for (const category of CATEGORIES) byCategory.set(category, analysis.causes.filter(cause => cause.category === category));
   const categories = CATEGORIES.flatMap(category => {
     const causes = byCategory.get(category) || [];
-    return causes.length ? [{ code: categoryCodes[category], causes: causes.filter(cause => cause.source === 'user').map(cause => cause.text) }] : [];
+    const userCauses = causes.filter(cause => cause.source === 'user').map(cause => cause.text);
+    const hasHypothesis = causes.some(cause => cause.source !== 'user');
+    if (!userCauses.length && !hasHypothesis) return [];
+    return [{ code: categoryCodes[category], ...(userCauses.length ? { causes: userCauses } : {}) }];
   });
   if (!categories.length) throw new Error('Bitte ergänzen Sie mindestens eine Beobachtung oder Hypothese.');
   const hypotheses = analysis.causes.filter(cause => cause.source !== 'user').map(cause => ({

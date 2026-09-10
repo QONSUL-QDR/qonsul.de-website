@@ -18,6 +18,14 @@ assert.match(event.hypotheses[0].title,/Prüfhypothese/);
 assert.equal(JSON.stringify(event).includes('contact'),false);
 assert.equal(JSON.stringify(event).includes('company'),false);
 
+const browserBlindspots={...analysis,causes:[
+  analysis.causes[0],
+  {id:'blindspot-product',category:'Produkt',text:'Synthetische Produkt-Hypothese',source:'rules'},
+  {id:'blindspot-process',category:'Prozess',text:'Synthetische Prozess-Hypothese',source:'rules'},
+]};
+const browserBlindspotEvent=diagnosticEvent('22222222-2222-4222-8222-222222222222',browserBlindspots);
+assert.deepEqual(browserBlindspotEvent.categories,[{code:'product'},{code:'process',causes:['Eigene synthetische Beobachtung']}], 'Browser blind spots must include every hypothesis category so Cockpit accepts its category_code.');
+
 const secret='diagnostic-local-test-secret-with-at-least-32-bytes';let seen=[];
 const fetchImpl=async (url,init)=>{seen.push({url:String(url),init});return Response.json({data:{id,reference:'QD-TEST-000001',status:'completed',evidence_score:50}},{status:201});};
 const delivered=await deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl});
