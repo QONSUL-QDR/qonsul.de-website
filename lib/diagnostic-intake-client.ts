@@ -2,29 +2,22 @@ import { signature } from './cockpit-intake-client.ts';
 
 type Options = { baseUrl: string; secret: string; fetchImpl?: typeof fetch; attempts?: number; timeoutMs?: number };
 type DiagnosticResponse = { data?: { id?: string; reference?: string; status?: string; evidence_score?: number } };
-export type DiagnosticRejectionTrace = { downstreamStatus: number; code: 'idempotency_conflict' | 'validation_failed'; fields: string[] };
 
 export class DiagnosticDeliveryError extends Error {
   readonly transient: boolean;
   readonly httpStatus: number | null;
-  readonly trace: DiagnosticRejectionTrace | null;
-  constructor(message: string, transient: boolean, httpStatus: number | null = null, trace: DiagnosticRejectionTrace | null = null) {
+  readonly retryWithNewSubmissionId: boolean;
+  constructor(message: string, transient: boolean, httpStatus: number | null = null, retryWithNewSubmissionId = false) {
     super(message); this.name = 'DiagnosticDeliveryError'; this.transient = transient; this.httpStatus = httpStatus;
-    this.trace = trace;
+    this.retryWithNewSubmissionId = retryWithNewSubmissionId;
   }
 }
 
-async function rejectionTrace(response: Response): Promise<DiagnosticRejectionTrace> {
-  let fields: string[] = [];
+async function hasIdempotencyConflict(response: Response): Promise<boolean> {
   try {
     const payload = await response.clone().json() as { errors?: Record<string, unknown> };
-    fields = Object.keys(payload.errors || {}).filter(field => /^[a-z0-9_.]+$/i.test(field)).sort();
-  } catch { /* The trace must never retain or expose a response body. */ }
-  return {
-    downstreamStatus: response.status,
-    code: fields.includes('idempotency_key') ? 'idempotency_conflict' : 'validation_failed',
-    fields,
-  };
+    return Object.prototype.hasOwnProperty.call(payload.errors || {}, 'idempotency_key');
+  } catch { return false; }
 }
 
 function validOptions(options: Options) {
@@ -45,7 +38,7 @@ async function post(path: string, event: Record<string, unknown>, options: Optio
         'X-Qonsul-Timestamp': String(timestamp), 'X-Qonsul-Signature': `v1=${await signature(options.secret, 'POST', path, timestamp, sourceEventId, body)}`,
       }, body });
       if (response.ok || response.status === 202) return response;
-      if (response.status < 500 && response.status !== 429) throw new DiagnosticDeliveryError('Diagnostic request was rejected.', false, response.status, await rejectionTrace(response));
+      if (response.status < 500 && response.status !== 429) throw new DiagnosticDeliveryError('Diagnostic request was rejected.', false, response.status, await hasIdempotencyConflict(response));
       if (attempt === attempts - 1) throw new DiagnosticDeliveryError('Diagnostic service is temporarily unavailable.', true, response.status);
     } catch (error) {
       if (error instanceof DiagnosticDeliveryError && !error.transient) throw error;

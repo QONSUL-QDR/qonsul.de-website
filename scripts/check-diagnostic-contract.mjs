@@ -27,7 +27,7 @@ assert.equal('credentials' in seen[0].init,false);
 
 await assert.rejects(
   () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({errors:{idempotency_key:['conflict']}},{status:422})}),
-  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 422 && error.trace?.code === 'idempotency_conflict' && error.trace.fields.join(',') === 'idempotency_key',
+  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 422 && error.retryWithNewSubmissionId === true,
 );
 
 const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'pending_review',diagnostic_id:id},{status:201})});

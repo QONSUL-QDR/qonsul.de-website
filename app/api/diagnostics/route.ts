@@ -10,9 +10,8 @@ const customerError = 'Die Analyse konnte nicht gespeichert werden. Bitte versuc
 
 function diagnosticError(error: unknown) {
   const status = error instanceof DiagnosticDeliveryError && error.transient ? 503 : error instanceof DiagnosticDeliveryError ? (error.httpStatus || 422) : 400;
-  const body: { error: string; retryWithNewSubmissionId?: true; trace?: import('@/lib/diagnostic-intake-client').DiagnosticRejectionTrace } = { error: customerError };
-  if (error instanceof DiagnosticDeliveryError && error.trace?.code === 'idempotency_conflict') body.retryWithNewSubmissionId = true;
-  if (setting('QONSUL_DIAGNOSTIC_TRACE') === 'true' && error instanceof DiagnosticDeliveryError && error.trace) body.trace = error.trace;
+  const body: { error: string; retryWithNewSubmissionId?: true } = { error: customerError };
+  if (error instanceof DiagnosticDeliveryError && error.retryWithNewSubmissionId) body.retryWithNewSubmissionId = true;
   return json(body, status);
 }
 
