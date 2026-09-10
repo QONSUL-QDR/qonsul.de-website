@@ -36,7 +36,10 @@ assert.equal('credentials' in seen[0].init,false);
 
 await assert.rejects(
   () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({errors:{idempotency_key:['conflict']}},{status:422})}),
-  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 422 && error.retryWithNewSubmissionId === true,
+  error => error instanceof DiagnosticDeliveryError
+    && error.httpStatus === 422
+    && error.retryWithNewSubmissionId === true
+    && JSON.stringify(error.trace) === JSON.stringify({downstreamStatus:422,errorCode:'idempotency_conflict',rejectedFields:['idempotency_key'],validationCodes:['validation_failed']}),
 );
 
 let nextSubmission = 0;
