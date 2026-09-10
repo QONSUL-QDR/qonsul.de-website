@@ -59,6 +59,7 @@ for(const marker of ['fish-layout','fish-lines','fish-problem','AUSGANGSPUNKT','
 assert.match(diagnosticUi,/cause\.source === 'user' \? 'Eigene Beobachtung' : 'Ergänzende Hypothese/);
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostics'/);
 assert.match(diagnosticUi,/function invalidateDraftSubmission\(\) \{ submissionId\.current = invalidateDraftSubmissionId\(\); \}/);
+assert.match(diagnosticUi,/document\.getElementById\('analyse'\)\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/,'Hero launch navigates to the Quality Diagnostic cause map');
 for(const marker of ['invalidateDraftSubmission(); step(\'causes\'', 'invalidateDraftSubmission(); const next = suggestRules', 'invalidateDraftSubmission(); setCauses', 'invalidateDraftSubmission(); setAvailableData', 'name="diagnosticConsent" type="checkbox" required onChange={invalidateDraftSubmission}', 'name="demoConfirmed" type="checkbox" required onChange={invalidateDraftSubmission}'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 assert.doesNotMatch(diagnosticUi,/\/api\/v1\/intake\/ishikawa/);
 assert.match(diagnosticUi,/lead-content diagnostic-result/);

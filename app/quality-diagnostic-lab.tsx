@@ -49,6 +49,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     emitAnalyticsHook('diagnostic_started', { diagnosticFlowId: flowId.current }); step('problem', 1);
     setInput(next); setProblem(next); setCauses([]); setAvailableData([]); setSaved(null); setConsultationOpen(false); setConsultationNotice(''); setError('');
     setNotice('Ergänzen Sie Ihre Beobachtungen. Vorschläge bleiben prüfbare Hypothesen, bis Ihr Team sie mit Daten bestätigt.');
+    setTimeout(() => document.getElementById('analyse')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   }
   function addCause(event: FormEvent) {
     event.preventDefault(); const text = draft.trim();
