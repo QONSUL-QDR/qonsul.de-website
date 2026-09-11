@@ -13,6 +13,9 @@ for(const problem of ['Sporadische thermische Ausfälle','Steigende Ausschussquo
 }
 assert.throws(()=>parseAnalysis({problem:'Unbekannte Kategorien ablehnen',causes:[{category:'Codebase',text:'Alte Kategorie',source:'user'}]}));
 assert.throws(()=>parseAnalysis({problem:'Neue Hypothesen validieren',causes:[],availableData:['unknown']}));
+assert.throws(()=>parseAnalysis({problem:'123456789',causes:[]}),/10 bis 600 Zeichen/,'nine-character problems are rejected locally');
+assert.equal(parseAnalysis({problem:'1234567890',causes:[]}).problem,'1234567890','ten-character problems are accepted');
+assert.equal(parseAnalysis({problem:'Autoreifen geplatzt',causes:[]}).problem,'Autoreifen geplatzt','short valid customer problems remain accepted');
 const legacy={problem:'Archivierte Softwareanalyse',mode:'rules',causes:[{id:'old',category:'Codebase',text:'Historische Beobachtung',source:'user'}]};
 assert.ok(reportHtml(legacy).includes('Historische Beobachtung'),'Legacy report causes must not disappear after changing categories');
 const unsafe={problem:'<script>alert(1)</script>',mode:'manual',causes:[{id:'one',category:'Produkt',text:'<img src=x onerror=alert(1)>',source:'user'}]};

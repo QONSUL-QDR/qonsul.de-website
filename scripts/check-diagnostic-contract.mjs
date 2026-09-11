@@ -36,10 +36,7 @@ assert.equal('credentials' in seen[0].init,false);
 
 await assert.rejects(
   () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({errors:{idempotency_key:['conflict']}},{status:422})}),
-  error => error instanceof DiagnosticDeliveryError
-    && error.httpStatus === 422
-    && error.retryWithNewSubmissionId === true
-    && JSON.stringify(error.trace) === JSON.stringify({downstreamStatus:422,errorCode:'idempotency_conflict',rejectedFields:['idempotency_key'],validationCodes:['validation_failed']}),
+  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 422 && error.retryWithNewSubmissionId === true,
 );
 
 let nextSubmission = 0;
@@ -80,6 +77,8 @@ assert.match(diagnosticUi,/lead-form diagnostic-content-wrap/);
 assert.match(diagnosticUi,/lead-content diagnostic-result diagnostic-content-wrap/);
 assert.match(diagnosticUi,/await withSavingState\(setBusy/);
 assert.match(diagnosticUi,/catch \{ setError\(diagnosticSaveError\); \}/);
+assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length validation must run before the Diagnostic flow starts');
+assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
 assert.match(diagnosticUi,/Ihre Beratungsanfrage wurde übermittelt\./);
 assert.match(diagnosticUi,/Die Beratungsanfrage konnte nicht übermittelt werden\. Bitte versuchen Sie es erneut\./);
 const diagnosticCss=await readFile(new URL('../app/globals.css',import.meta.url),'utf8');

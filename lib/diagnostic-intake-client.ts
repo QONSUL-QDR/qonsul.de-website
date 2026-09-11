@@ -3,52 +3,21 @@ import { signature } from './cockpit-intake-client.ts';
 type Options = { baseUrl: string; secret: string; fetchImpl?: typeof fetch; attempts?: number; timeoutMs?: number };
 type DiagnosticResponse = { data?: { id?: string; reference?: string; status?: string; evidence_score?: number } };
 
-export type DiagnosticRejectionTrace = {
-  downstreamStatus: number;
-  errorCode: 'idempotency_conflict' | 'validation_failed' | 'downstream_rejected';
-  rejectedFields: string[];
-  validationCodes: string[];
-};
-
 export class DiagnosticDeliveryError extends Error {
   readonly transient: boolean;
   readonly httpStatus: number | null;
   readonly retryWithNewSubmissionId: boolean;
-  readonly trace: DiagnosticRejectionTrace | null;
-  constructor(message: string, transient: boolean, httpStatus: number | null = null, retryWithNewSubmissionId = false, trace: DiagnosticRejectionTrace | null = null) {
+  constructor(message: string, transient: boolean, httpStatus: number | null = null, retryWithNewSubmissionId = false) {
     super(message); this.name = 'DiagnosticDeliveryError'; this.transient = transient; this.httpStatus = httpStatus;
     this.retryWithNewSubmissionId = retryWithNewSubmissionId;
-    this.trace = trace;
   }
 }
 
-function validationCode(message: unknown): string {
-  const value = typeof message === 'string' ? message.toLowerCase() : '';
-  if (/at least|mindestens/.test(value)) return 'min';
-  if (/greater than|maximal|höchstens/.test(value)) return 'max';
-  if (/uuid/.test(value)) return 'uuid';
-  if (/array/.test(value)) return 'array';
-  if (/string/.test(value)) return 'string';
-  if (/distinct|eindeutig/.test(value)) return 'distinct';
-  if (/hypothesen-kategorie|categories/.test(value)) return 'category_membership';
-  if (/einwillig|consent/.test(value)) return 'consent_required';
-  return 'validation_failed';
-}
-
-async function rejectionTrace(response: Response): Promise<DiagnosticRejectionTrace> {
-  let errors: Record<string, unknown> = {};
+async function hasIdempotencyConflict(response: Response): Promise<boolean> {
   try {
     const payload = await response.clone().json() as { errors?: Record<string, unknown> };
-    errors = payload.errors || {};
-  } catch { /* Traces must never retain a downstream response body. */ }
-  const rejectedFields = Object.keys(errors).filter(field => /^[a-z0-9_.]+$/i.test(field)).sort();
-  const validationCodes = [...new Set(Object.values(errors).flatMap(messages => Array.isArray(messages) ? messages.map(validationCode) : []))].sort();
-  return {
-    downstreamStatus: response.status,
-    errorCode: rejectedFields.includes('idempotency_key') ? 'idempotency_conflict' : rejectedFields.length ? 'validation_failed' : 'downstream_rejected',
-    rejectedFields,
-    validationCodes,
-  };
+    return Object.prototype.hasOwnProperty.call(payload.errors || {}, 'idempotency_key');
+  } catch { return false; }
 }
 
 function validOptions(options: Options) {
@@ -69,10 +38,7 @@ async function post(path: string, event: Record<string, unknown>, options: Optio
         'X-Qonsul-Timestamp': String(timestamp), 'X-Qonsul-Signature': `v1=${await signature(options.secret, 'POST', path, timestamp, sourceEventId, body)}`,
       }, body });
       if (response.ok || response.status === 202) return response;
-      if (response.status < 500 && response.status !== 429) {
-        const trace = await rejectionTrace(response);
-        throw new DiagnosticDeliveryError('Diagnostic request was rejected.', false, response.status, trace.errorCode === 'idempotency_conflict', trace);
-      }
+      if (response.status < 500 && response.status !== 429) throw new DiagnosticDeliveryError('Diagnostic request was rejected.', false, response.status, await hasIdempotencyConflict(response));
       if (attempt === attempts - 1) throw new DiagnosticDeliveryError('Diagnostic service is temporarily unavailable.', true, response.status);
     } catch (error) {
       if (error instanceof DiagnosticDeliveryError && !error.transient) throw error;
