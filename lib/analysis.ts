@@ -4,6 +4,7 @@ export const DATA_KINDS = ['Anforderungen & FMEA', 'Prüf- & Messdaten', 'Prozes
 export type DataKind = typeof DATA_KINDS[number];
 export type Source = 'user' | 'ai' | 'rules';
 export type Cause = { id: string; category: Category; text: string; source: Source; check?: string; metric?: string; data?: DataKind[] };
+export type BlindSpot = { id: string; category: Category; prompt: string };
 export type Analysis = { problem: string; causes: Cause[]; mode: 'manual' | 'ai' | 'rules'; availableData?: DataKind[] };
 export const METRICS = ['Ausfallrate', 'Ausschussquote', 'Nacharbeitsquote', 'Anforderungsabdeckung', 'Messsystemstreuung', 'Maßnahmenwirksamkeit'] as const;
 export const CONSENT_VERSION = '2026-08-30-v1';
@@ -51,6 +52,25 @@ const rules: Record<Category, Rule[]> = {
 export function suggestRules(problem: string, existing: Cause[] = []): Cause[] {
   const focus = /therm|temperatur|sporad|wärme|hitze|feucht|vibration/i.test(problem) ? 1 : /liefer|charge|änder|reklam/i.test(problem) ? 2 : 0;
   return CATEGORIES.flatMap(category => [rules[category][focus], rules[category][(focus + 1) % 3]].filter(r => !existing.some(c=>c.category===category && c.text.toLowerCase()===r[0].toLowerCase())).map(([text, check, metric, data], i) => ({ id: 'rules-'+category+'-'+focus+'-'+i, category, text, check, metric, data, source: 'rules' as const })));
+}
+function blindSpotContext(problem: string) {
+  if (/brems|bremskraft|zange/i.test(problem)) return 'die Bremskraft beziehungsweise den Prüfaufbau';
+  if (/sensor|messdaten|messwert/i.test(problem)) return 'die beobachteten Sensorsignale und ihre Messkette';
+  if (/liefer|termin|logistik/i.test(problem)) return 'die regelmäßig verfehlte Liefertermintreue';
+  return 'die beobachtete Qualitätsabweichung';
+}
+export function suggestBlindSpots(problem: string, existing: Cause[] = []): BlindSpot[] {
+  const context = blindSpotContext(problem);
+  const prompts: Record<Category, string> = {
+    Produkt: `Welche Produktmerkmale oder Schnittstellen könnten ${context} beeinflussen?`,
+    Prozess: `Welche Prozessschritte, Übergaben oder Änderungen könnten ${context} beeinflussen?`,
+    Material: `Welche Material-, Komponenten- oder Lieferanteneinflüsse sollten für ${context} geprüft werden?`,
+    Mensch: `Können Montage-, Einstell-, Planungs- oder Bedienabweichungen ${context} beeinflussen?`,
+    Messung: `Ist die Messung, Bewertung oder der Prüfaufbau für ${context} verifiziert?`,
+    Umgebung: `Können Temperatur, Transport, Verschmutzung oder Betriebsbedingungen ${context} beeinflussen?`,
+  };
+  const covered = new Set(existing.map(cause => cause.category));
+  return CATEGORIES.filter(category => !covered.has(category)).map(category => ({ id: `blind-spot-${category}`, category, prompt: prompts[category] }));
 }
 function parseData(value:unknown):DataKind[] {
   if(value===undefined)return [];

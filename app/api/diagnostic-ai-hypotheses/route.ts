@@ -1,5 +1,5 @@
 import { CATEGORIES, parseAnalysis, type Category, type Cause } from '@/lib/analysis';
-import { requestPublicAIHypotheses } from '@/lib/public-ai-intake-client';
+import { PublicAIIntakeError, requestPublicAIHypotheses } from '@/lib/public-ai-intake-client';
 import { json, rateLimit, readBody, setting } from '@/lib/server';
 
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -8,7 +8,7 @@ const customerError = 'Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eig
 export async function POST(request: Request) {
   try {
     const body = await readBody(request);
-    if (!await rateLimit(request, 'public-ai-hypotheses', 5)) return json({ error: customerError }, 429);
+    if (!await rateLimit(request, 'public-ai-hypotheses', 5)) return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': '60' });
     if (!uuid(body.sourceEventId)) return json({ error: customerError }, 400);
     const analysis = parseAnalysis({ problem: body.problem, causes: body.causes, availableData: [] });
     const hypotheses = await requestPublicAIHypotheses({
@@ -26,5 +26,11 @@ export async function POST(request: Request) {
     }));
     parseAnalysis({ problem: analysis.problem, causes });
     return json({ causes, notice: 'KI-Hypothesen ergänzt. Bitte mit Daten validieren; keine bestätigten Ursachen.' });
-  } catch { return json({ error: customerError }, 503); }
+  } catch (error) {
+    if (error instanceof PublicAIIntakeError && error.httpStatus === 429) {
+      if (error.retryAfterSeconds) return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': String(error.retryAfterSeconds) });
+      return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429);
+    }
+    return json({ error: customerError }, 503);
+  }
 }

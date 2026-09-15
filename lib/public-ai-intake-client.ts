@@ -12,7 +12,9 @@ export type PublicAIHypothesis = {
 
 export class PublicAIIntakeError extends Error {
   readonly transient: boolean;
-  constructor(transient: boolean) { super('Public AI assistance is unavailable.'); this.transient = transient; }
+  readonly httpStatus: number | null;
+  readonly retryAfterSeconds: number | null;
+  constructor(transient: boolean, httpStatus: number | null = null, retryAfterSeconds: number | null = null) { super('Public AI assistance is unavailable.'); this.transient = transient; this.httpStatus = httpStatus; this.retryAfterSeconds = retryAfterSeconds; }
 }
 
 export async function requestPublicAIHypotheses(
@@ -38,7 +40,10 @@ export async function requestPublicAIHypotheses(
     });
   } catch { throw new PublicAIIntakeError(true); }
 
-  if (!response.ok) throw new PublicAIIntakeError(response.status >= 500 || response.status === 429);
+  if (!response.ok) {
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    throw new PublicAIIntakeError(response.status >= 500 || response.status === 429, response.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null);
+  }
   const result = await response.json() as { hypotheses?: unknown };
   if (!Array.isArray(result.hypotheses)) throw new PublicAIIntakeError(false);
   return result.hypotheses as PublicAIHypothesis[];

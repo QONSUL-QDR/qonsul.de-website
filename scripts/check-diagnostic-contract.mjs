@@ -5,6 +5,7 @@ import {deliverDiagnostic,requestDiagnosticConsultation,DiagnosticDeliveryError}
 import {signature} from '../lib/cockpit-intake-client.ts';
 import {requestPublicAIHypotheses,PublicAIIntakeError} from '../lib/public-ai-intake-client.ts';
 import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
+import {suggestBlindSpots} from '../lib/analysis.ts';
 
 const id='11111111-1111-4111-8111-111111111111';
 const analysis={problem:'Synthetisches Qualitätsproblem für den getrennten Diagnostic-Contract.',mode:'rules',availableData:['Prüf- & Messdaten'],causes:[
@@ -76,6 +77,14 @@ const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://c
 assert.equal(publicAi[0].origin,'ai');
 assert.equal(publicAiSeen,true);
 await assert.rejects(()=>requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret:'short'}),PublicAIIntakeError);
+await assert.rejects(
+  () => requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'60'}})}),
+  error => error instanceof PublicAIIntakeError && error.httpStatus === 429 && error.retryAfterSeconds === 60,
+);
+const blindSpotProblems=['Bremskraft von Bremszange wird nicht erreicht','Messdaten eines Sensors schwanken unplausibel','Liefertermine eines Bauteils werden regelmäßig verfehlt'];
+const blindSpotSets=blindSpotProblems.map(problem=>suggestBlindSpots(problem,[{id:'covered',category:'Produkt',text:'Synthetische Beobachtung',source:'user'}]));
+assert.equal(blindSpotSets.every(spots=>spots.every(spot=>spot.category!=='Produkt'&&spot.prompt.endsWith('?'))),true,'blind spots are questions only for uncovered categories');
+assert.equal(new Set(blindSpotSets.map(spots=>spots.map(spot=>spot.prompt).join('|'))).size,3,'distinct problem contexts receive distinct blind-spot prompts');
 const diagnosticUi=await readFile(new URL('../app/quality-diagnostic-lab.tsx',import.meta.url),'utf8');
 for(const marker of ['fish-layout','fish-lines','fish-problem','AUSGANGSPUNKT','+ Eigene Ursache','Ihre Perspektive ergänzen','Was übersehen wir vielleicht?'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 assert.match(diagnosticUi,/cause\.source === 'user' \? 'Eigene Beobachtung' : cause\.source === 'ai' \? 'KI-Hypothese/);
@@ -84,7 +93,7 @@ assert.match(diagnosticUi,/function invalidateDraftSubmission\(\) \{ submissionI
 assert.match(diagnosticUi,/document\.getElementById\('analyse'\)\?\.scrollIntoView\(\{ behavior: 'smooth', block: 'start' \}\)/,'Hero launch navigates to the Quality Diagnostic cause map');
 assert.match(diagnosticUi,/submissionIdForSave\(submissionId\.current, \(\) => crypto\.randomUUID\(\)\)/,'Browser UUID generation remains bound through a callback wrapper');
 assert.doesNotMatch(diagnosticUi,/submissionIdForSave\(submissionId\.current, crypto\.randomUUID\)/,'Browser crypto.randomUUID must not be passed unbound');
-for(const marker of ['invalidateDraftSubmission(); step(\'causes\'', 'invalidateDraftSubmission(); const next = suggestRules', 'invalidateDraftSubmission(); setCauses', 'invalidateDraftSubmission(); setAvailableData', 'name="diagnosticConsent" type="checkbox" required onChange={invalidateDraftSubmission}', 'name="demoConfirmed" type="checkbox" required onChange={invalidateDraftSubmission}'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+for(const marker of ['invalidateDraftSubmission(); step(\'causes\'', 'invalidateDraftSubmission(); setCauses', 'invalidateDraftSubmission(); setAvailableData', 'name="diagnosticConsent" type="checkbox" required onChange={invalidateDraftSubmission}', 'name="demoConfirmed" type="checkbox" required onChange={invalidateDraftSubmission}'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 assert.doesNotMatch(diagnosticUi,/\/api\/v1\/intake\/ishikawa/);
 assert.match(diagnosticUi,/lead-content diagnostic-result/);
 assert.match(diagnosticUi,/lead-form diagnostic-content-wrap/);
@@ -100,6 +109,15 @@ assert.match(diagnosticUi,/function dismissAISuggestion/,'each AI suggestion can
 assert.match(diagnosticUi,/KI-Hypothesen sind Analysevorschläge und keine bestätigten Ursachen\./,'the required AI disclaimer is visible');
 assert.match(diagnosticUi,/>Übernehmen</,'AI suggestions can be accepted explicitly');
 assert.match(diagnosticUi,/>Verwerfen</,'AI suggestions can be dismissed explicitly');
+assert.match(diagnosticUi,/aiRequestInFlight\.current/,'a synchronous request guard blocks repeated clicks before React state updates');
+assert.match(diagnosticUi,/KI-Hypothesen werden erstellt …/,'the loading state is visible while an AI request is active');
+assert.match(diagnosticUi,/Neue KI-Hypothesen erstellen/,'later deliberate regeneration stays available');
+assert.match(diagnosticUi,/setBlindSpots\(suggestBlindSpots\(problem, causes\)\)/,'blind spots are separate deterministic investigation prompts');
+assert.match(diagnosticUi,/Diese Fragen sind Untersuchungsperspektiven und keine Ursachen\./,'blind-spot semantics are explicit in the UI');
+assert.match(diagnosticUi,/Eigene Beobachtung formulieren/,'blind spots guide the user to the existing own-cause action instead of being added automatically');
+const publicAiRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/route.ts',import.meta.url),'utf8');
+assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled retry hint');
+assert.match(publicAiRoute,/Die KI-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe German message');
 assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length validation must run before the Diagnostic flow starts');
 assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
 assert.match(diagnosticUi,/Ihre Beratungsanfrage wurde übermittelt\./);
