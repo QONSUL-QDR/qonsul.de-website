@@ -5,8 +5,6 @@ export type PublicAIHypothesis = {
   category: string;
   text: string;
   reasoning_summary: string;
-  knowledge_support: string;
-  ai_confidence: number;
   origin: 'ai';
 };
 

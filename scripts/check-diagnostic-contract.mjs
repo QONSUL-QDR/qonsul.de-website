@@ -72,7 +72,7 @@ const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://c
   assert.equal(pathName,'/api/v1/intake/diagnostic/ai-hypotheses');
   assert.equal(headers.get('X-Qonsul-Signature'),`v1=${await signature(secret,'POST',pathName,timestamp,publicAiEvent.source_event_id,body)}`);
   assert.equal(headers.has('Authorization'),false); publicAiSeen=true;
-  return Response.json({hypotheses:[{id:'ai-1',category:'Prozess',text:'Synthetische KI-Hypothese',reasoning_summary:'Mit Daten prüfen.',knowledge_support:'Keine bestätigte Ursache.',ai_confidence:45,origin:'ai'}]});
+  return Response.json({hypotheses:[{id:'ai-1',category:'Prozess',text:'Synthetische KI-Hypothese',reasoning_summary:'Mit Daten prüfen.',origin:'ai'}]});
 }});
 assert.equal(publicAi[0].origin,'ai');
 assert.equal(publicAiSeen,true);
