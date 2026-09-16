@@ -3,3 +3,5 @@
 // all outside a Vite build (e.g. scripts run directly with plain `node`),
 // which lib/build-info.ts handles via a `typeof` guard.
 declare const __QONSUL_BUILD_COMMIT_SHA__: string;
+declare const __QONSUL_BUILD_TREE_SHA__: string;
+declare const __QONSUL_BUILD_APPLICATION__: string;

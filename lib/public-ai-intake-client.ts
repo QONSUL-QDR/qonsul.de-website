@@ -8,6 +8,11 @@ export type PublicAIHypothesis = {
   origin: 'ai';
 };
 
+export type PublicAIHypothesesStatus = {
+  status: 'processing' | 'completed' | 'failed' | 'not_found';
+  hypotheses?: PublicAIHypothesis[];
+};
+
 export class PublicAIIntakeError extends Error {
   readonly transient: boolean;
   readonly httpStatus: number | null;
@@ -45,4 +50,38 @@ export async function requestPublicAIHypotheses(
   const result = await response.json() as { hypotheses?: unknown };
   if (!Array.isArray(result.hypotheses)) throw new PublicAIIntakeError(false);
   return result.hypotheses as PublicAIHypothesis[];
+}
+
+/** Reads only the Cockpit's cached public-AI state; it never requests generation. */
+export async function requestPublicAIHypothesesStatus(
+  sourceEventId: string,
+  options: { baseUrl: string; secret: string; fetchImpl?: typeof fetch; timeoutMs?: number },
+): Promise<PublicAIHypothesesStatus> {
+  if (options.secret.length < 32) throw new PublicAIIntakeError(false);
+  const base = new URL(options.baseUrl);
+  if (base.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(base.hostname)) throw new PublicAIIntakeError(false);
+
+  const path = '/api/v1/intake/diagnostic/ai-hypotheses/status';
+  const body = JSON.stringify({ source_event_id: sourceEventId }), correlationId = crypto.randomUUID();
+  const timestamp = Math.floor(Date.now() / 1000);
+  let response: Response;
+  try {
+    response = await (options.fetchImpl || fetch)(new URL(path, base), {
+      method: 'POST', signal: AbortSignal.timeout(Math.min(15_000, Math.max(500, options.timeoutMs || 10_000))),
+      headers: {
+        'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Request-ID': correlationId,
+        'X-Qonsul-Timestamp': String(timestamp),
+        'X-Qonsul-Signature': `v1=${await signature(options.secret, 'POST', path, timestamp, sourceEventId, body)}`,
+      }, body,
+    });
+  } catch { throw new PublicAIIntakeError(true, null, null, correlationId, base.hostname, path, 'OTHER_NETWORK_ERROR'); }
+
+  if (!response.ok) {
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    throw new PublicAIIntakeError(response.status >= 500 || response.status === 429, response.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null, correlationId, base.hostname, path);
+  }
+  const result = await response.json() as { status?: unknown; hypotheses?: unknown };
+  if (!['processing', 'completed', 'failed', 'not_found'].includes(String(result.status))) throw new PublicAIIntakeError(false);
+  if (result.status === 'completed' && !Array.isArray(result.hypotheses)) throw new PublicAIIntakeError(false);
+  return result as PublicAIHypothesesStatus;
 }

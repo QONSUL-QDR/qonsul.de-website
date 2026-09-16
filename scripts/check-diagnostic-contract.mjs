@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {diagnosticEvent,DIAGNOSTIC_PROCESSING_CONSENT_VERSION} from '../lib/diagnostic-contract.ts';
 import {deliverDiagnostic,requestDiagnosticConsultation,DiagnosticDeliveryError} from '../lib/diagnostic-intake-client.ts';
 import {signature} from '../lib/cockpit-intake-client.ts';
-import {requestPublicAIHypotheses,PublicAIIntakeError} from '../lib/public-ai-intake-client.ts';
+import {requestPublicAIHypotheses,requestPublicAIHypothesesStatus,PublicAIIntakeError} from '../lib/public-ai-intake-client.ts';
 import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
 import {suggestBlindSpots} from '../lib/analysis.ts';
 
@@ -76,6 +76,16 @@ const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://c
 }});
 assert.equal(publicAi[0].origin,'ai');
 assert.equal(publicAiSeen,true);
+let publicAiStatusSeen=false;
+const publicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
+  const headers=new Headers(init?.headers),pathName=new URL(String(url)).pathname,timestamp=Number(headers.get('X-Qonsul-Timestamp')),body=String(init?.body);
+  assert.equal(pathName,'/api/v1/intake/diagnostic/ai-hypotheses/status');
+  assert.equal(body,JSON.stringify({source_event_id:publicAiEvent.source_event_id}));
+  assert.equal(headers.get('X-Qonsul-Signature'),`v1=${await signature(secret,'POST',pathName,timestamp,publicAiEvent.source_event_id,body)}`);
+  publicAiStatusSeen=true; return Response.json({status:'completed',hypotheses:[{id:'ai-1',category:'Prozess',text:'Synthetische KI-Hypothese',reasoning_summary:'Mit Daten prüfen.',origin:'ai'}]});
+}});
+assert.equal(publicAiStatus.status,'completed');
+assert.equal(publicAiStatusSeen,true);
 await assert.rejects(()=>requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret:'short'}),PublicAIIntakeError);
 await assert.rejects(
   () => requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'60'}})}),
@@ -111,6 +121,12 @@ assert.match(diagnosticUi,/>Übernehmen</,'AI suggestions can be accepted explic
 assert.match(diagnosticUi,/>Verwerfen</,'AI suggestions can be dismissed explicitly');
 assert.match(diagnosticUi,/aiRequestInFlight\.current/,'a synchronous request guard blocks repeated clicks before React state updates');
 assert.match(diagnosticUi,/KI-Hypothesen werden erstellt …/,'the loading state is visible while an AI request is active');
+assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\)/,'one click begins bounded status polling for the same event ID');
+assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses\/status'/,'polling uses the Website same-origin status route');
+assert.match(diagnosticUi,/body: JSON\.stringify\(\{ sourceEventId \}\)/,'polling reuses the generation source event ID');
+assert.match(diagnosticUi,/Date\.now\(\) \+ 60_000/,'status polling has a hard overall deadline');
+assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling responses are settled only once');
+assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'[\s\S]*fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'/,'polling never invokes a second generation request');
 assert.match(diagnosticUi,/Neue KI-Hypothesen erstellen/,'later deliberate regeneration stays available');
 assert.match(diagnosticUi,/setBlindSpots\(suggestBlindSpots\(problem, causes\)\)/,'blind spots are separate deterministic investigation prompts');
 assert.match(diagnosticUi,/Diese Fragen sind Untersuchungsperspektiven und keine Ursachen\./,'blind-spot semantics are explicit in the UI');
@@ -118,6 +134,9 @@ assert.match(diagnosticUi,/Eigene Beobachtung formulieren/,'blind spots guide th
 const publicAiRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/route.ts',import.meta.url),'utf8');
 assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled retry hint');
 assert.match(publicAiRoute,/Die KI-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe German message');
+const publicAiStatusRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/status/route.ts',import.meta.url),'utf8');
+assert.match(publicAiStatusRoute,/requestPublicAIHypothesesStatus/,'the browser-facing status endpoint signs a server-side Cockpit status request');
+assert.doesNotMatch(publicAiStatusRoute,/requestPublicAIHypotheses\(/,'the status endpoint cannot start generation');
 assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length validation must run before the Diagnostic flow starts');
 assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
 assert.match(diagnosticUi,/Ihre Beratungsanfrage wurde übermittelt\./);

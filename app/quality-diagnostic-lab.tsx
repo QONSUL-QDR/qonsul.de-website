@@ -22,12 +22,20 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   const [selected, setSelected] = useState<Category>('Produkt'), [draft, setDraft] = useState(''), [availableData, setAvailableData] = useState<DataKind[]>([]);
   const [status, setStatus] = useState(initialStatus), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [saved, setSaved] = useState<DiagnosticResult | null>(null), [consultationOpen, setConsultationOpen] = useState(false), [consultationNotice, setConsultationNotice] = useState('');
-  const submissionId = useRef(''), consultationId = useRef(''), aiRequestId = useRef(''), aiRequestInFlight = useRef(false), flowId = useRef(''), completedSteps = useRef(new Set<string>()), causeInput = useRef<HTMLInputElement>(null);
+  const submissionId = useRef(''), consultationId = useRef(''), aiRequestId = useRef(''), aiRequestInFlight = useRef(false), aiPollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null), aiPollingFlow = useRef(0), aiResultApplied = useRef(false), flowId = useRef(''), completedSteps = useRef(new Set<string>()), causeInput = useRef<HTMLInputElement>(null);
   const analysis: Analysis = { problem, causes, availableData, mode: causes.some(c => c.source === 'ai') ? 'ai' : causes.some(c => c.source === 'rules') ? 'rules' : 'manual' };
   const userCount = causes.filter(cause => cause.source === 'user').length;
   const hypothesisCount = causes.length - userCount;
 
   function invalidateDraftSubmission() { submissionId.current = invalidateDraftSubmissionId(); aiRequestId.current = ''; }
+
+  function stopAIPolling() {
+    aiPollingFlow.current += 1;
+    if (aiPollingTimer.current) clearTimeout(aiPollingTimer.current);
+    aiPollingTimer.current = null;
+  }
+
+  useEffect(() => () => stopAIPolling(), []);
 
   useEffect(() => { fetch('/api/status').then(response => response.json() as Promise<typeof initialStatus>).then(setStatus).catch(() => {}); }, []);
   // The launcher is intentionally a one-shot action keyed by its monotonically
@@ -47,7 +55,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   function start(value = input) {
     const next = value.trim();
     if (next.length < 10) return setError('Bitte beschreiben Sie das Problem in mindestens 10 Zeichen.');
-    flowId.current = crypto.randomUUID(); completedSteps.current.clear(); invalidateDraftSubmission(); consultationId.current = '';
+    stopAIPolling(); flowId.current = crypto.randomUUID(); completedSteps.current.clear(); invalidateDraftSubmission(); consultationId.current = '';
     emitAnalyticsHook('diagnostic_started', { diagnosticFlowId: flowId.current }); step('problem', 1);
     setInput(next); setProblem(next); setCauses([]); setAiSuggestions([]); setBlindSpots([]); setAvailableData([]); setSaved(null); setConsultationOpen(false); setConsultationNotice(''); setError('');
     setNotice('Ergänzen Sie Ihre Beobachtungen. Vorschläge bleiben prüfbare Hypothesen, bis Ihr Team sie mit Daten bestätigt.');
@@ -63,32 +71,68 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     setBlindSpots(suggestBlindSpots(problem, causes));
     setNotice('Blinde Flecken sind Untersuchungsfragen und keine Ursachen. Formulieren Sie bei Bedarf eine eigene Beobachtung.');
   }
+  function applyAIHypotheses(result: { causes?: Cause[]; notice?: string }) {
+    if (aiResultApplied.current || !result.causes) return;
+    aiResultApplied.current = true;
+    stopAIPolling();
+    const supplementalByCategory = new Map<Category, number>(CATEGORIES.map(category => [category, causes.filter(item => item.category === category && item.source !== 'user').length]));
+    const accepted = result.causes.filter(candidate => {
+      const count = supplementalByCategory.get(candidate.category) || 0;
+      if (count >= 2) return false;
+      supplementalByCategory.set(candidate.category, count + 1);
+      return true;
+    });
+    if (accepted.length === 0) {
+      setError('Für ergänzende Hypothesen ist in den gewählten Perspektiven kein Platz mehr frei.');
+    } else {
+      setAiSuggestions(accepted);
+      setNotice(result.notice || 'KI-Hypothesen bereit. Bitte einzeln übernehmen oder verwerfen; keine bestätigten Ursachen.');
+    }
+    aiRequestInFlight.current = false;
+    setBusy(false);
+  }
+  function beginAIPolling(sourceEventId: string) {
+    const pollingFlow = ++aiPollingFlow.current;
+    const deadline = Date.now() + 60_000;
+    const poll = async () => {
+      if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
+      try {
+        const response = await fetch('/api/diagnostic-ai-hypotheses/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(12_000), body: JSON.stringify({ sourceEventId }) });
+        const result = await response.json() as { status?: 'processing' | 'completed' | 'failed' | 'not_found'; causes?: Cause[]; error?: string };
+        if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
+        if (response.ok && result.status === 'completed' && result.causes) return applyAIHypotheses({ causes: result.causes });
+        if (response.ok && result.status === 'failed') {
+          stopAIPolling(); aiRequestInFlight.current = false; setBusy(false); setError('Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.'); return;
+        }
+      } catch { /* A transient status error is retried until the bounded deadline. */ }
+      if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
+      if (Date.now() >= deadline) {
+        stopAIPolling(); aiRequestInFlight.current = false; setBusy(false); setError('Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.'); return;
+      }
+      aiPollingTimer.current = setTimeout(poll, 2_500);
+    };
+    aiPollingTimer.current = setTimeout(poll, 3_000);
+  }
   async function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current) return;
     if (aiSuggestions.length > 0 && !regenerate) return setNotice('Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder erstellen Sie später bewusst neue Vorschläge.');
     if (regenerate) aiRequestId.current = '';
     aiRequestInFlight.current = true;
-    setError(''); setNotice('');
+    aiResultApplied.current = false;
+    stopAIPolling();
+    setError(''); setNotice('KI-Hypothesen werden erstellt …');
     if (!aiRequestId.current) aiRequestId.current = crypto.randomUUID();
+    const sourceEventId = aiRequestId.current;
     setBusy(true);
+    beginAIPolling(sourceEventId);
     try {
       const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45000), body: JSON.stringify({
-        sourceEventId: aiRequestId.current, problem, causes,
+        sourceEventId, problem, causes,
       }) });
       const result = await response.json() as { causes?: Cause[]; error?: string; notice?: string };
       if (!response.ok || !result.causes) throw new Error(result.error || 'KI-Hypothesen konnten nicht ergänzt werden.');
-      const supplementalByCategory = new Map<Category, number>(CATEGORIES.map(category => [category, causes.filter(item => item.category === category && item.source !== 'user').length]));
-      const accepted = result.causes.filter(candidate => {
-        const count = supplementalByCategory.get(candidate.category) || 0;
-        if (count >= 2) return false;
-        supplementalByCategory.set(candidate.category, count + 1);
-        return true;
-      });
-      if (accepted.length === 0) throw new Error('Für ergänzende Hypothesen ist in den gewählten Perspektiven kein Platz mehr frei.');
-      setAiSuggestions(accepted);
-      setNotice(result.notice || 'KI-Hypothesen bereit. Bitte einzeln übernehmen oder verwerfen; keine bestätigten Ursachen.');
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.'); }
-    finally { aiRequestInFlight.current = false; setBusy(false); }
+      applyAIHypotheses(result);
+    } catch { /* Status polling resolves controlled provider failures and timeouts. */ }
   }
   function acceptAISuggestion(id: string) {
     const suggestion = aiSuggestions.find(item => item.id === id);
