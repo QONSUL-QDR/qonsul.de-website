@@ -10,3 +10,5 @@
 // throwing, so this module is always safe to import.
 export const BUILD_COMMIT_SHA: string =
   typeof __QONSUL_BUILD_COMMIT_SHA__ === 'string' && __QONSUL_BUILD_COMMIT_SHA__ ? __QONSUL_BUILD_COMMIT_SHA__ : 'unknown';
+export const BUILD_TREE_SHA: string = typeof __QONSUL_BUILD_TREE_SHA__ === 'string' ? __QONSUL_BUILD_TREE_SHA__ : 'unknown';
+export const BUILD_APPLICATION: string = typeof __QONSUL_BUILD_APPLICATION__ === 'string' ? __QONSUL_BUILD_APPLICATION__ : 'unknown';

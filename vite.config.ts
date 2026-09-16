@@ -31,6 +31,8 @@ function resolveBuildCommitSha(): string {
   }
 }
 const buildCommitSha = resolveBuildCommitSha();
+function resolveBuildTreeSha(): string { try { return execSync('git rev-parse HEAD^{tree}', { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return 'unknown'; } }
+const buildTreeSha = resolveBuildTreeSha();
 
 const { d1, r2 } = hostingConfig;
 
@@ -83,7 +85,7 @@ export default defineConfig(async () => {
 
   return {
     css: { postcss: { plugins: [tailwindcss()] } },
-    define: { __QONSUL_BUILD_COMMIT_SHA__: JSON.stringify(buildCommitSha) },
+    define: { __QONSUL_BUILD_COMMIT_SHA__: JSON.stringify(buildCommitSha), __QONSUL_BUILD_TREE_SHA__: JSON.stringify(buildTreeSha), __QONSUL_BUILD_APPLICATION__: JSON.stringify('qonsul-website') },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
