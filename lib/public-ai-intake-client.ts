@@ -29,7 +29,7 @@ export async function requestPublicAIHypotheses(
   let response: Response;
   try {
     response = await (options.fetchImpl || fetch)(new URL(path, base), {
-      method: 'POST', signal: AbortSignal.timeout(Math.min(10_000, Math.max(500, options.timeoutMs || 8_000))),
+      method: 'POST', signal: AbortSignal.timeout(Math.min(40_000, Math.max(500, options.timeoutMs || 35_000))),
       headers: {
         'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Request-ID': correlationId,
         'X-Qonsul-Timestamp': String(timestamp),
