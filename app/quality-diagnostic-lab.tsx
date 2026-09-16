@@ -103,7 +103,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   function beginAIPolling(sourceEventId: string) {
     const pollingFlow = ++aiPollingFlow.current;
-    const deadline = Date.now() + 60_000;
+    const deadline = Date.now() + 90_000;
     const poll = async () => {
       if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
       try {

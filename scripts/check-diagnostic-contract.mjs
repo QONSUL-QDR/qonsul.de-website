@@ -130,9 +130,13 @@ assert.match(diagnosticUi,/KI-Hypothesen werden erstellt …/,'the loading state
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\)/,'one click begins bounded status polling for the same event ID');
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses\/status'/,'polling uses the Website same-origin status route');
 assert.match(diagnosticUi,/body: JSON\.stringify\(\{ sourceEventId \}\)/,'polling reuses the generation source event ID');
-assert.match(diagnosticUi,/Date\.now\(\) \+ 60_000/,'status polling has a hard overall deadline');
+assert.match(diagnosticUi,/Date\.now\(\) \+ 90_000/,'status polling has a hard ninety-second overall deadline');
 assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling responses are settled only once');
 assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'[\s\S]*fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'/,'polling never invokes a second generation request');
+assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\);\s+try \{\s+const response = await fetch\('\/api\/diagnostic-ai-hypotheses'/,'status polling begins before the initial generation response can time out');
+assert.match(diagnosticUi,/\} catch \{ \/\* Status polling resolves controlled provider failures and timeouts\. \*\/ \}/,'an initial generation timeout does not stop active status polling or mark a final UI error');
+assert.match(diagnosticUi,/response\.ok && result\.status === 'completed' && result\.causes\) return applyAIHypotheses/,'a later completed status result is applied after an initial generation timeout');
+assert.match(diagnosticUi,/response\.ok && result\.status === 'failed'\) \{\s+stopAIPolling\(\);[\s\S]*?setError\('Die KI-Hypothesen konnten nicht ergänzt werden/,'a failed status result remains a controlled technical error');
 assert.match(diagnosticUi,/Neue KI-Hypothesen erstellen/,'later deliberate regeneration stays available');
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\), \[analysisExhausted, setAnalysisExhausted\] = useState\(false\)/,'the conversion state starts inactive');
 assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+setAnalysisExhausted\(true\);/,'a technically successful AI result without usable hypotheses activates the conversion state immediately');
