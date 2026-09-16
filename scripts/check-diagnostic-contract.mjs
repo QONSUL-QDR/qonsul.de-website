@@ -152,6 +152,10 @@ assert.match(publicAiRoute,/Die KI-Analyse wurde gerade bereits ausgeführt/,'42
 const publicAiStatusRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/status/route.ts',import.meta.url),'utf8');
 assert.match(publicAiStatusRoute,/requestPublicAIHypothesesStatus/,'the browser-facing status endpoint signs a server-side Cockpit status request');
 assert.doesNotMatch(publicAiStatusRoute,/requestPublicAIHypotheses\(/,'the status endpoint cannot start generation');
+const pollsPerRun=Math.ceil(60_000/2_500),statusPollLimit=180;
+assert.match(publicAiStatusRoute,/rateLimit\(request, 'public-ai-hypotheses-status', 180\)/,'read-only status polling remains rate-limited at a bounded higher limit');
+assert.ok(statusPollLimit>=5*pollsPerRun+60,'the status limit supports at least five full polling runs per hour with reserve');
+assert.match(publicAiRoute,/rateLimit\(request, 'public-ai-hypotheses', 5\)/,'the generation endpoint keeps its strict independent limit');
 assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length validation must run before the Diagnostic flow starts');
 assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
 assert.match(diagnosticUi,/Ihre Beratungsanfrage wurde übermittelt\./);

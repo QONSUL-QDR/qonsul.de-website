@@ -8,7 +8,7 @@ const customerError = 'Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eig
 export async function POST(request: Request) {
   try {
     const body = await readBody(request);
-    if (!await rateLimit(request, 'public-ai-hypotheses-status', 60)) return json({ error: customerError }, 429, { 'Retry-After': '60' });
+    if (!await rateLimit(request, 'public-ai-hypotheses-status', 180)) return json({ error: customerError }, 429, { 'Retry-After': '60' });
     if (!uuid(body.sourceEventId)) return json({ error: customerError }, 400);
     const result = await requestPublicAIHypothesesStatus(body.sourceEventId, {
       baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET'),
