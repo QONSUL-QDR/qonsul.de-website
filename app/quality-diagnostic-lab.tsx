@@ -72,7 +72,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     if (!aiRequestId.current) aiRequestId.current = crypto.randomUUID();
     setBusy(true);
     try {
-      const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(12000), body: JSON.stringify({
+      const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45000), body: JSON.stringify({
         sourceEventId: aiRequestId.current, problem, causes,
       }) });
       const result = await response.json() as { causes?: Cause[]; error?: string; notice?: string };
