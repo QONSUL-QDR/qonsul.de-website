@@ -27,6 +27,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   const analysis: Analysis = { problem, causes, availableData, mode: causes.some(c => c.source === 'ai') ? 'ai' : causes.some(c => c.source === 'rules') ? 'rules' : 'manual' };
   const userCount = causes.filter(cause => cause.source === 'user').length;
   const hypothesisCount = causes.length - userCount;
+  const hasAICapacity = CATEGORIES.some(category => causes.filter(cause => cause.category === category && cause.source !== 'user').length < 2);
 
   function invalidateDraftSubmission() { submissionId.current = invalidateDraftSubmissionId(); aiRequestId.current = ''; }
 
@@ -125,6 +126,12 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   async function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current) return;
+    if (!hasAICapacity) {
+      setError('');
+      setAnalysisExhausted(true);
+      setNotice('Die verfügbaren Analyseperspektiven sind bereits umfassend ausgeschöpft.');
+      return;
+    }
     if (aiSuggestions.length > 0 && !regenerate) return setNotice('Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder erstellen Sie später bewusst neue Vorschläge.');
     if (regenerate) aiRequestId.current = '';
     aiRequestInFlight.current = true;

@@ -136,6 +136,8 @@ assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { me
 assert.match(diagnosticUi,/Neue KI-Hypothesen erstellen/,'later deliberate regeneration stays available');
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\), \[analysisExhausted, setAnalysisExhausted\] = useState\(false\)/,'the conversion state starts inactive');
 assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+setHasCompletedAIRun\(true\);\s+setAnalysisExhausted\(true\);/,'only a technically successful AI result without capacity activates the conversion state');
+assert.match(diagnosticUi,/const hasAICapacity = CATEGORIES\.some\(category => causes\.filter\(cause => cause\.category === category && cause\.source !== 'user'\)\.length < 2\);/,'local AI capacity follows the existing two supplemental-hypotheses-per-category rule');
+assert.match(diagnosticUi,/if \(!hasAICapacity\) \{\s+setError\(''\);\s+setAnalysisExhausted\(true\);[\s\S]*?return;\s+\}\s+if \(aiSuggestions\.length > 0 && !regenerate\)/,'a completely full Cause Map enters the neutral conversion state before a source event, polling, or provider request is started');
 assert.doesNotMatch(diagnosticUi,/setError\('Für ergänzende Hypothesen ist in den gewählten Perspektiven kein Platz mehr frei\.'/,'capacity exhaustion is never rendered as a red technical error');
 assert.match(diagnosticUi,/setAnalysisExhausted\(false\);\s+setAiSuggestions\(accepted\)/,'a later AI result with accepted hypotheses clears the conversion state');
 assert.match(diagnosticUi,/Analyseperspektiven umfassend ausgeschöpft/,'the neutral conversion heading is displayed');
