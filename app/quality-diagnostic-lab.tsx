@@ -24,7 +24,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   const [selected, setSelected] = useState<Category>('Produkt'), [draft, setDraft] = useState(''), [availableData, setAvailableData] = useState<DataKind[]>([]);
   const [status, setStatus] = useState(initialStatus), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [saved, setSaved] = useState<DiagnosticResult | null>(null), [consultationOpen, setConsultationOpen] = useState(false), [consultationNotice, setConsultationNotice] = useState('');
-  const submissionId = useRef(''), consultationId = useRef(''), aiRequestId = useRef(''), aiRequestInFlight = useRef(false), aiPollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null), aiPollingFlow = useRef(0), aiResultApplied = useRef(false), analysisProgressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), flowId = useRef(''), completedSteps = useRef(new Set<string>()), causeInput = useRef<HTMLInputElement>(null);
+  const submissionId = useRef(''), consultationId = useRef(''), aiRequestId = useRef(''), aiRequestInFlight = useRef(false), aiPollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null), aiPollingDeadlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null), aiPollingFlow = useRef(0), aiResultApplied = useRef(false), analysisProgressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), flowId = useRef(''), completedSteps = useRef(new Set<string>()), causeInput = useRef<HTMLInputElement>(null);
   const analysis: Analysis = { problem, causes, availableData, mode: causes.some(c => c.source === 'ai') ? 'ai' : causes.some(c => c.source === 'rules') ? 'rules' : 'manual' };
   const userCount = causes.filter(cause => cause.source === 'user').length;
   const hypothesisCount = causes.length - userCount;
@@ -36,6 +36,8 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     aiPollingFlow.current += 1;
     if (aiPollingTimer.current) clearTimeout(aiPollingTimer.current);
     aiPollingTimer.current = null;
+    if (aiPollingDeadlineTimer.current) clearTimeout(aiPollingDeadlineTimer.current);
+    aiPollingDeadlineTimer.current = null;
   }
 
   function resetAnalysisProgress() {
@@ -73,15 +75,6 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }, []);
 
   useEffect(() => { fetch('/api/status').then(response => response.json() as Promise<typeof initialStatus>).then(setStatus).catch(() => {}); }, []);
-  // The launcher is intentionally a one-shot action keyed by its monotonically
-  // increasing id; re-running it on state changes would discard user input.
-  useEffect(() => {
-    if (!launch?.problem) return;
-    if (problem) return;
-    start(launch.problem);
-  // The launch id is deliberately the sole trigger; state changes must not restart an in-progress Diagnostic.
-  }, [launch?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
   function step(key: 'problem' | 'causes' | 'report', sequence: number) {
     if (!flowId.current || completedSteps.current.has(key)) return;
     completedSteps.current.add(key);
@@ -96,6 +89,16 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     setNotice('Ergänzen Sie Ihre Beobachtungen. Vorschläge bleiben prüfbare Hypothesen, bis Ihr Team sie mit Daten bestätigt.');
     setTimeout(() => document.getElementById('analyse')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   }
+  // The launcher is intentionally a one-shot action keyed by its monotonically
+  // increasing id; re-running it on state changes would discard user input.
+  useEffect(() => {
+    if (!launch?.problem) return;
+    if (problem) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- launch is an external one-shot event, not derived render state.
+    start(launch.problem);
+  // The launch id is deliberately the sole trigger; state changes must not restart an in-progress Diagnostic.
+  }, [launch?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function addCause(event: FormEvent) {
     event.preventDefault(); const text = draft.trim();
     if (text.length < 3) return;
@@ -138,7 +141,9 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   function beginAIPolling(sourceEventId: string) {
     const pollingFlow = ++aiPollingFlow.current;
-    const deadline = Date.now() + 90_000;
+    aiPollingDeadlineTimer.current = setTimeout(() => {
+      if (pollingFlow === aiPollingFlow.current && !aiResultApplied.current) failAIAnalysis();
+    }, 90_000);
     const poll = async () => {
       if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
       try {
@@ -149,9 +154,6 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
         if (response.ok && result.status === 'failed') return failAIAnalysis();
       } catch { /* A transient status error is retried until the bounded deadline. */ }
       if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
-      if (Date.now() >= deadline) {
-        return failAIAnalysis();
-      }
       aiPollingTimer.current = setTimeout(poll, 2_500);
     };
     aiPollingTimer.current = setTimeout(poll, 3_000);

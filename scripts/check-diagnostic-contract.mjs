@@ -34,8 +34,19 @@ const fetchImpl=async (url,init)=>{seen.push({url:String(url),init});return Resp
 const delivered=await deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl});
 assert.deepEqual(delivered,{id,reference:'QD-TEST-000001',evidenceScore:50,replayed:false});
 assert.equal(new URL(seen[0].url).pathname,'/api/v1/intake/diagnostic');
+assert.equal(seen[0].init.redirect,'manual');
 assert.equal(seen[0].init.headers['X-Qonsul-Signature'].startsWith('v1='),true);
 assert.equal('credentials' in seen[0].init,false);
+
+let diagnosticRedirectRequests=0;
+await assert.rejects(
+  () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(_url,init)=>{
+    diagnosticRedirectRequests++; assert.equal(init?.redirect,'manual');
+    return new Response(null,{status:302,headers:{Location:'https://untrusted.example/redirect-target'}});
+  }}),
+  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 302 && !error.transient,
+);
+assert.equal(diagnosticRedirectRequests,1,'a 3xx Diagnostic response is not followed with a second request');
 
 await assert.rejects(
   () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({errors:{idempotency_key:['conflict']}},{status:422})}),
@@ -149,7 +160,7 @@ assert.match(diagnosticUi,/aria-busy=\{analysisBusy\}/,'the running action commu
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\)/,'one click begins bounded status polling for the same event ID');
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses\/status'/,'polling uses the Website same-origin status route');
 assert.match(diagnosticUi,/body: JSON\.stringify\(\{ sourceEventId \}\)/,'polling reuses the generation source event ID');
-assert.match(diagnosticUi,/Date\.now\(\) \+ 90_000/,'status polling has a hard ninety-second overall deadline');
+assert.match(diagnosticUi,/aiPollingDeadlineTimer\.current = setTimeout\([\s\S]*?\}, 90_000\)/,'status polling has a hard ninety-second overall deadline');
 assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling responses are settled only once');
 assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'[\s\S]*fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'/,'polling never invokes a second generation request');
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\);\s+try \{\s+const response = await fetch\('\/api\/diagnostic-ai-hypotheses'/,'status polling begins before the initial generation response can time out');
