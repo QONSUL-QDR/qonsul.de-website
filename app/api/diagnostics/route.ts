@@ -40,6 +40,7 @@ export async function PUT(request: Request) {
     const email = typeof body.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email) ? body.email.trim().toLowerCase() : null;
     const company = typeof body.company === 'string' && body.company.trim().length <= 150 ? body.company.trim() || null : null;
     if (!name || !email || body.contactConsent !== true || body.privacyVersion !== CONTACT_PRIVACY_VERSION) throw new Error('Bitte geben Sie Ihre Kontaktdaten ein und bestätigen Sie die Kontaktaufnahme.');
+    if (!await rateLimit(request, 'diagnostic-consultation', 8)) return json({ error: 'Zu viele Beratungsanfragen. Bitte später erneut versuchen.' }, 429);
     const result = await requestDiagnosticConsultation({
       source_event_id: body.consultationId, diagnostic_id: body.diagnosticId,
       contact: { name, email }, ...(company ? { company: { name: company } } : {}),

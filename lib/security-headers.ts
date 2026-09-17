@@ -35,5 +35,7 @@ export function websiteSecurityHeaders(): Array<[string, string]> {
     ['X-Content-Type-Options', 'nosniff'],
     ['Referrer-Policy', 'strict-origin-when-cross-origin'],
     ['Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=()'],
+    ['Cross-Origin-Opener-Policy', 'same-origin'],
+    ['Cross-Origin-Resource-Policy', 'same-origin'],
   ];
 }

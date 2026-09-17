@@ -27,7 +27,7 @@ export async function deliverIntake(source:IntakeSource,event:IntakeEvent,option
   for(let attempt=0;attempt<attempts;attempt++){
     const timestamp=Math.floor(Date.now()/1000);
     try{
-      const response=await execute(url,{method:'POST',signal:AbortSignal.timeout(timeoutMs),headers:{'Content-Type':'application/json','Accept':'application/json','X-Qonsul-Timestamp':String(timestamp),'X-Qonsul-Signature':`v1=${await signature(options.secret,'POST',path,timestamp,event.source_event_id,body)}`,'X-Request-ID':requestId},body});
+      const response=await execute(url,{method:'POST',redirect:'error',signal:AbortSignal.timeout(timeoutMs),headers:{'Content-Type':'application/json','Accept':'application/json','X-Qonsul-Timestamp':String(timestamp),'X-Qonsul-Signature':`v1=${await signature(options.secret,'POST',path,timestamp,event.source_event_id,body)}`,'X-Request-ID':requestId},body});
       if(response.ok){const result=await response.json() as Partial<IntakeDelivery>;if(result.status==='accepted'&&typeof result.reference==='string')return {...result,httpStatus:response.status} as IntakeDelivery;throw new IntakeDeliveryError('Unexpected intake response.',false,'response',response.status);}
       if(response.status<500&&response.status!==429){
         const kind=response.status===401||response.status===403?'authentication':response.status===400||response.status===413||response.status===415||response.status===422?'validation':'response';

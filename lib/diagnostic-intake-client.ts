@@ -33,7 +33,7 @@ async function post(path: string, event: Record<string, unknown>, options: Optio
   for (let attempt = 0; attempt < attempts; attempt++) {
     const timestamp = Math.floor(Date.now() / 1000), sourceEventId = String(event.source_event_id || ''), requestId = crypto.randomUUID();
     try {
-      const response = await execute(url, { method: 'POST', signal: AbortSignal.timeout(timeout), headers: {
+      const response = await execute(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeout), headers: {
         'Accept': 'application/json', 'Content-Type': 'application/json', 'Idempotency-Key': sourceEventId, 'X-Request-ID': requestId,
         'X-Qonsul-Timestamp': String(timestamp), 'X-Qonsul-Signature': `v1=${await signature(options.secret, 'POST', path, timestamp, sourceEventId, body)}`,
       }, body });
