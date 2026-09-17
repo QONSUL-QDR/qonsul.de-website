@@ -65,7 +65,7 @@ assert.deepEqual(timeoutStates,[true,false],'timeout ends saving state');
 const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'pending_review',diagnostic_id:id},{status:201})});
 assert.deepEqual(consultation,{status:'pending_review',diagnosticId:id});
 await assert.rejects(()=>deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret:'short',fetchImpl}),DiagnosticDeliveryError);
-const publicAiEvent={source_event_id:'33333333-3333-4333-8333-333333333333',problem:'Synthetisches Qualitätsproblem für die KI-Unterstützung.',causes:[{category:'Prozess',text:'Synthetische Beobachtung'}]};
+const publicAiEvent={source_event_id:'33333333-3333-4333-8333-333333333333',analysis_round:1,problem:'Synthetisches Qualitätsproblem für die KI-Unterstützung.',causes:[{category:'Prozess',text:'Synthetische Beobachtung'}]};
 let publicAiSeen=false;
 const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   const headers=new Headers(init?.headers),pathName=new URL(String(url)).pathname,timestamp=Number(headers.get('X-Qonsul-Timestamp')),body=String(init?.body);
@@ -113,6 +113,8 @@ assert.match(diagnosticUi,/catch \{ setError\(diagnosticSaveError\); \}/);
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses'/,'Public Diagnostic uses its own signed Cockpit route, not Ishikawa');
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\)/,'AI responses remain separate from the Cause Map until user selection');
 assert.match(diagnosticUi,/const \[completedAIRounds, setCompletedAIRounds\] = useState\(0\)/,'the AI round counter starts at zero for every new Diagnostic flow');
+assert.match(diagnosticUi,/const analysisRound: 1 \| 2 = completedAIRounds === 0 \? 1 : 2/,'the browser derives an explicit first or second analysis round without changing the UX');
+assert.match(diagnosticUi,/sourceEventId, analysisRound, problem, causes: \[\.\.\.causes, \.\.\.aiSuggestions\]/,'each bounded AI generation sends its round and preserves the original problem plus unconfirmed context');
 assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+setAnalysisExhausted\(true\);[\s\S]*?\} else \{\s+setCompletedAIRounds\(previous => Math\.min\(previous \+ 1, 2\)\);/,'only a successful AI result with at least one usable hypothesis advances a bounded round counter');
 assert.match(diagnosticUi,/\{!analysisExhausted && completedAIRounds === 0 && <button[^>]+boost-action-button[^>]+onClick=\{\(\) => addAIHypotheses\(\)\}[\s\S]*?QONSUL Expertise einbeziehen/,'the initial QONSUL action is visible only before the first successful AI round and never beside conversion');
 assert.match(diagnosticUi,/\{!analysisExhausted && completedAIRounds > 0 && <button[^>]+boost-action-button[^>]+onClick=\{\(\) => addAIHypotheses\(true\)\}[\s\S]*?QONSUL Expertise vertiefen/,'deliberate regeneration uses the branded follow-up action only while another round is allowed');
@@ -157,7 +159,7 @@ assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+setAnalysisExhaust
 assert.match(diagnosticUi,/if \(completedAIRounds >= 2\) \{\s+setError\(''\);\s+setAnalysisExhausted\(true\);[\s\S]*?return;\s+\}\s+if \(aiSuggestions\.length > 0 && !regenerate\)[\s\S]*?if \(regenerate\) aiRequestId\.current = '';/,'only a third deliberate AI attempt enters conversion before a source event, polling, provider request, or progress animation');
 assert.doesNotMatch(diagnosticUi,/hasAICapacity/,'local capacity cannot block the required second AI round or activate conversion after round one');
 assert.match(diagnosticUi,/if \(aiRequestInFlight\.current \|\| analysisExhausted\) return;/,'a completed conversion state cannot restart an AI request');
-assert.match(diagnosticUi,/sourceEventId, problem, causes: \[\.\.\.causes, \.\.\.aiSuggestions\]/,'round two sends accepted and still-visible unconfirmed hypotheses as analysis context');
+assert.match(diagnosticUi,/sourceEventId, analysisRound, problem, causes: \[\.\.\.causes, \.\.\.aiSuggestions\]/,'round two sends accepted and still-visible unconfirmed hypotheses as analysis context');
 assert.match(diagnosticUi,/function start\(value = input\) \{[\s\S]*?stopAIPolling\(\); resetAnalysisProgress\(\);/,'a new Diagnostic flow clears visual progress and polling');
 assert.doesNotMatch(diagnosticUi,/setError\('Für ergänzende Hypothesen ist in den gewählten Perspektiven kein Platz mehr frei\.'/,'capacity exhaustion is never rendered as a red technical error');
 assert.match(diagnosticUi,/setCompletedAIRounds\(previous => Math\.min\(previous \+ 1, 2\)\);\s+setAnalysisExhausted\(false\);\s+setAiSuggestions\(accepted\)/,'both successful AI rounds keep their new hypotheses visible and do not activate conversion');
@@ -177,6 +179,8 @@ assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled ret
 assert.match(publicAiRoute,/Die KI-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe German message');
 assert.match(publicAiRoute,/return json\(\{ error: customerError \}, 503\)/,'provider failures remain controlled 503 technical errors');
 assert.match(publicAiRoute,/causes: analysis\.causes\.map\(cause => \(\{ category: cause\.category, text: cause\.text \}\)\)/,'the Website forwards all accepted and pending hypothesis context for duplicate avoidance without changing Cockpit');
+assert.match(publicAiRoute,/body\.analysisRound !== 1 && body\.analysisRound !== 2/,'the Website accepts only the two explicit analysis rounds');
+assert.match(publicAiRoute,/analysis_round: body\.analysisRound/,'the Website forwards the explicit round to Cockpit');
 assert.doesNotMatch(publicAiRoute,/analysis\.causes\.filter\(cause => cause\.source === 'user'\)/,'AI context is no longer restricted to user observations alone');
 const publicAiStatusRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/status/route.ts',import.meta.url),'utf8');
 assert.match(publicAiStatusRoute,/requestPublicAIHypothesesStatus/,'the browser-facing status endpoint signs a server-side Cockpit status request');

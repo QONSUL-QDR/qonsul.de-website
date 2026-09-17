@@ -21,7 +21,7 @@ export class PublicAIIntakeError extends Error {
 }
 
 export async function requestPublicAIHypotheses(
-  event: { source_event_id: string; problem: string; causes: { category: string; text: string }[] },
+  event: { source_event_id: string; analysis_round: 1 | 2; problem: string; causes: { category: string; text: string }[] },
   options: { baseUrl: string; secret: string; fetchImpl?: typeof fetch; timeoutMs?: number },
 ): Promise<PublicAIHypothesis[]> {
   if (options.secret.length < 32) throw new PublicAIIntakeError(false);

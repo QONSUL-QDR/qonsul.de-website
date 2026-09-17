@@ -10,9 +10,11 @@ export async function POST(request: Request) {
     const body = await readBody(request);
     if (!await rateLimit(request, 'public-ai-hypotheses', 5)) return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': '60' });
     if (!uuid(body.sourceEventId)) return json({ error: customerError }, 400);
+    if (body.analysisRound !== 1 && body.analysisRound !== 2) return json({ error: customerError }, 400);
     const analysis = parseAnalysis({ problem: body.problem, causes: body.causes, availableData: [] });
     const hypotheses = await requestPublicAIHypotheses({
       source_event_id: body.sourceEventId,
+      analysis_round: body.analysisRound,
       problem: analysis.problem,
       // Accepted and still-pending hypotheses are unconfirmed context only: they
       // help the second round avoid repetition, but do not persist as causes.

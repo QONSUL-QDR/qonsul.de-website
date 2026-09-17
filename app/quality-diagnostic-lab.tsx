@@ -160,6 +160,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     }
     if (aiSuggestions.length > 0 && !regenerate) return setNotice('Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder erstellen Sie später bewusst neue Vorschläge.');
     if (regenerate) aiRequestId.current = '';
+    const analysisRound: 1 | 2 = completedAIRounds === 0 ? 1 : 2;
     aiRequestInFlight.current = true;
     aiResultApplied.current = false;
     stopAIPolling();
@@ -171,7 +172,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     beginAIPolling(sourceEventId);
     try {
       const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45000), body: JSON.stringify({
-        sourceEventId, problem, causes: [...causes, ...aiSuggestions],
+        sourceEventId, analysisRound, problem, causes: [...causes, ...aiSuggestions],
       }) });
       const result = await response.json() as { causes?: Cause[]; error?: string; notice?: string };
       if (!response.ok || !result.causes) throw new Error(result.error || 'KI-Hypothesen konnten nicht ergänzt werden.');
