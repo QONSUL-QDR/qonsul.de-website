@@ -70,6 +70,7 @@ let publicAiSeen=false;
 const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   const headers=new Headers(init?.headers),pathName=new URL(String(url)).pathname,timestamp=Number(headers.get('X-Qonsul-Timestamp')),body=String(init?.body);
   assert.equal(pathName,'/api/v1/intake/diagnostic/ai-hypotheses');
+  assert.equal(init?.redirect,'manual');
   assert.equal(headers.get('X-Qonsul-Signature'),`v1=${await signature(secret,'POST',pathName,timestamp,publicAiEvent.source_event_id,body)}`);
   assert.equal(headers.has('Authorization'),false); publicAiSeen=true;
   return Response.json({hypotheses:[{id:'ai-1',category:'Prozess',text:'Synthetische KI-Hypothese',reasoning_summary:'Mit Daten prüfen.',origin:'ai'}]});
@@ -80,6 +81,7 @@ let publicAiStatusSeen=false;
 const publicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   const headers=new Headers(init?.headers),pathName=new URL(String(url)).pathname,timestamp=Number(headers.get('X-Qonsul-Timestamp')),body=String(init?.body);
   assert.equal(pathName,'/api/v1/intake/diagnostic/ai-hypotheses/status');
+  assert.equal(init?.redirect,'manual');
   assert.equal(body,JSON.stringify({source_event_id:publicAiEvent.source_event_id}));
   assert.equal(headers.get('X-Qonsul-Signature'),`v1=${await signature(secret,'POST',pathName,timestamp,publicAiEvent.source_event_id,body)}`);
   publicAiStatusSeen=true; return Response.json({status:'completed',hypotheses:[{id:'ai-1',category:'Prozess',text:'Synthetische KI-Hypothese',reasoning_summary:'Mit Daten prüfen.',origin:'ai'}]});

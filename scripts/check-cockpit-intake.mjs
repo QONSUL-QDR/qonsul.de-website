@@ -17,16 +17,27 @@ assert.equal(await ishikawaSourceCauseId(ishikawa.source_event_id,'cause-0'),sta
 assert.notEqual(await ishikawaSourceCauseId(ishikawa.source_event_id,'cause-1'),stableCauseId);
 
 let attempts=0;const seen=[];
-const mock=async(url,init)=>{attempts++;const body=String(init.body),event=JSON.parse(body),pathName=new URL(url).pathname,timestamp=Number(init.headers['X-Qonsul-Timestamp']);seen.push({event,requestId:init.headers['X-Request-ID']});assert.equal(init.headers['X-Qonsul-Signature'],`v1=${await signature(secret,'POST',pathName,timestamp,event.source_event_id,body)}`);return attempts===1?Response.json({message:'temporary'},{status:503}):Response.json({status:'accepted',reference:'internal-reference'});};
+const mock=async(url,init)=>{attempts++;const body=String(init.body),event=JSON.parse(body),pathName=new URL(url).pathname,timestamp=Number(init.headers['X-Qonsul-Timestamp']);seen.push({event,requestId:init.headers['X-Request-ID'],redirect:init.redirect});assert.equal(init.headers['X-Qonsul-Signature'],`v1=${await signature(secret,'POST',pathName,timestamp,event.source_event_id,body)}`);return attempts===1?Response.json({message:'temporary'},{status:503}):Response.json({status:'accepted',reference:'internal-reference'});};
 const accepted=await deliverIntake('contact',contact,{baseUrl:'http://localhost:9999',secret,fetchImpl:mock,timeoutMs:1000});
 assert.deepEqual(accepted,{status:'accepted',reference:'internal-reference',httpStatus:200});
 assert.equal(attempts,2);assert.equal(seen[0].event.source_event_id,seen[1].event.source_event_id);assert.equal(seen[0].requestId,seen[1].requestId);
+assert.equal(seen[0].redirect,'manual');
 
 let rejectedCalls=0;
 await assert.rejects(()=>deliverIntake('ishikawa',ishikawa,{baseUrl:'http://localhost:9999',secret,fetchImpl:async()=>{rejectedCalls++;return Response.json({message:'invalid'},{status:422});}}),error=>error instanceof IntakeDeliveryError&&!error.transient);
 assert.equal(rejectedCalls,1);
 await assert.rejects(()=>deliverIntake('ishikawa',ishikawa,{baseUrl:'http://localhost:9999',secret,fetchImpl:async()=>Response.json({message:'invalid signature'},{status:401})}),error=>error instanceof IntakeDeliveryError&&error.kind==='authentication'&&error.httpStatus===401&&!error.transient);
 await assert.rejects(()=>deliverIntake('contact',contact,{baseUrl:'http://localhost:9999',secret:'short',fetchImpl:mock}),IntakeDeliveryError);
+
+let redirectRequests=0;
+await assert.rejects(
+  () => deliverIntake('contact',contact,{baseUrl:'http://localhost:9999',secret,fetchImpl:async(_url,init)=>{
+    redirectRequests++; assert.equal(init?.redirect,'manual');
+    return new Response(null,{status:302,headers:{Location:'https://untrusted.example/redirect-target'}});
+  }}),
+  error => error instanceof IntakeDeliveryError && error.httpStatus === 302 && !error.transient,
+);
+assert.equal(redirectRequests,1,'a 3xx response is not followed with a second request');
 
 const timestamp=Math.floor(Date.now()/1000),body=JSON.stringify(contact),valid=await signature(secret,'POST','/api/v1/intake/contact',timestamp,contact.source_event_id,body),tampered=JSON.stringify({...contact,payload:{message:'tampered'}}),invalid=await signature(secret,'POST','/api/v1/intake/contact',timestamp,contact.source_event_id,tampered);
 assert.notEqual(valid,invalid);

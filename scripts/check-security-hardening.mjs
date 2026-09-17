@@ -38,6 +38,7 @@ assert.match(server, /mediaType!==['"]application\/json['"]/);
 assert.match(server, /typeof parsed!==['"]object['"]\|\|Array\.isArray\(parsed\)/);
 assert.match(diagnostics, /rateLimit\(request, 'diagnostic-consultation', 8\)/);
 assert.doesNotMatch(status, /OPENAI_API_KEY|RESEND_API_KEY|cockpitConfigured|productionReady|contactReady|contactEmail/);
-for (const client of [intakeClient, diagnosticIntakeClient, publicAiIntakeClient]) assert.match(client, /redirect:\s*['"]error['"]/);
+for (const client of [intakeClient, publicAiIntakeClient]) assert.match(client, /redirect:\s*['"]manual['"]/);
+assert.match(diagnosticIntakeClient, /redirect:\s*['"]error['"]/);
 
 console.log('PASS timing-safe maintenance comparison, strict JSON boundary, outbound redirect blocking, rate limit, and security headers');
