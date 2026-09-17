@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     const hypotheses = await requestPublicAIHypotheses({
       source_event_id: body.sourceEventId,
       problem: analysis.problem,
-      causes: analysis.causes.filter(cause => cause.source === 'user').map(cause => ({ category: cause.category, text: cause.text })),
+      // Accepted and still-pending hypotheses are unconfirmed context only: they
+      // help the second round avoid repetition, but do not persist as causes.
+      causes: analysis.causes.map(cause => ({ category: cause.category, text: cause.text })),
     }, { baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET') });
 
     const causes: Cause[] = hypotheses.map((hypothesis, index) => ({
