@@ -60,6 +60,13 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     setError('Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.');
   }
 
+  function activateAnalysisConversion() {
+    setError('');
+    setAnalysisExhausted(true);
+    setOpenConsultationAfterSave(true);
+    setNotice('Die verfügbaren Analyseperspektiven sind bereits umfassend ausgeschöpft.');
+  }
+
   useEffect(() => () => {
     stopAIPolling();
     if (analysisProgressTimer.current) clearTimeout(analysisProgressTimer.current);
@@ -113,8 +120,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     });
     completeAnalysisProgress(() => {
       if (accepted.length === 0) {
-        setAnalysisExhausted(true);
-        setNotice('Die verfügbaren Analyseperspektiven sind bereits umfassend ausgeschöpft.');
+        activateAnalysisConversion();
       } else {
         setCompletedAIRounds(previous => Math.min(previous + 1, 2));
         setAnalysisExhausted(false);
@@ -153,9 +159,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   async function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current || analysisExhausted) return;
     if (completedAIRounds >= 2) {
-      setError('');
-      setAnalysisExhausted(true);
-      setNotice('Die verfügbaren Analyseperspektiven sind bereits umfassend ausgeschöpft.');
+      activateAnalysisConversion();
       return;
     }
     if (aiSuggestions.length > 0 && !regenerate) return setNotice('Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder erstellen Sie später bewusst neue Vorschläge.');
@@ -192,7 +196,6 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   function submitDiagnostic(event: FormEvent<HTMLFormElement>) {
     const continueAfterSave = analysisExhausted || openConsultationAfterSave;
-    if (analysisExhausted) setOpenConsultationAfterSave(true);
     void save(event, continueAfterSave);
   }
   async function save(event: FormEvent<HTMLFormElement>, continueAfterSave = openConsultationAfterSave) {
