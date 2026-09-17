@@ -3,12 +3,12 @@ import { PublicAIIntakeError, requestPublicAIHypotheses } from '@/lib/public-ai-
 import { json, rateLimit, readBody, setting } from '@/lib/server';
 
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-const customerError = 'Die KI-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.';
+const customerError = 'Die QONSUL-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.';
 
 export async function POST(request: Request) {
   try {
     const body = await readBody(request);
-    if (!await rateLimit(request, 'public-ai-hypotheses', 5)) return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': '60' });
+    if (!await rateLimit(request, 'public-ai-hypotheses', 5)) return json({ error: 'Die QONSUL-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': '60' });
     if (!uuid(body.sourceEventId)) return json({ error: customerError }, 400);
     if (body.analysisRound !== 1 && body.analysisRound !== 2) return json({ error: customerError }, 400);
     const analysis = parseAnalysis({ problem: body.problem, causes: body.causes, availableData: [] });
@@ -29,14 +29,14 @@ export async function POST(request: Request) {
       source: 'ai',
     }));
     parseAnalysis({ problem: analysis.problem, causes });
-    return json({ causes, notice: 'KI-Hypothesen ergänzt. Bitte mit Daten validieren; keine bestätigten Ursachen.' });
+    return json({ causes, notice: 'QONSUL-Hypothesen ergänzt. Bitte mit Daten validieren; keine bestätigten Ursachen.' });
   } catch (error) {
     if (setting('STAGING_AI_INTAKE_TRACE') === 'true' && error instanceof PublicAIIntakeError) {
       console.info('staging_ai_intake_trace', JSON.stringify({ correlation_id: error.correlationId, handler_reached: true, outbound_attempted: true, target_host: error.targetHost, target_path: error.targetPath, method: 'POST', content_type: 'application/json', hmac_header_present: true, timestamp_header_present: true, cockpit_status: error.httpStatus, network_failure: error.networkFailure }));
     }
     if (error instanceof PublicAIIntakeError && error.httpStatus === 429) {
-      if (error.retryAfterSeconds) return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': String(error.retryAfterSeconds) });
-      return json({ error: 'Die KI-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429);
+      if (error.retryAfterSeconds) return json({ error: 'Die QONSUL-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429, { 'Retry-After': String(error.retryAfterSeconds) });
+      return json({ error: 'Die QONSUL-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder versuchen Sie es in Kürze erneut.' }, 429);
     }
     return json({ error: customerError }, 503);
   }
