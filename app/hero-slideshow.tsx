@@ -19,9 +19,10 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
   const [inView, setInView] = useState(true);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const { current: currentFrame, previous: previousFrame } = frame;
   const playing = ready && !paused && !reducedMotion && visible && inView && !editing;
-  const slide = heroSlides[frame.current];
-  const pending = requested !== frame.current;
+  const slide = heroSlides[currentFrame];
+  const pending = requested !== currentFrame;
 
   useEffect(() => {
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -73,19 +74,19 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!playing || pending || frame.previous !== null) return;
+    if (!playing || pending || previousFrame !== null) return;
     // Fetch only the next motif after the first viewport has had time to load.
-    const preload = window.setTimeout(() => { void load((frame.current + 1) % heroSlides.length).catch(() => {}); }, 2000);
+    const preload = window.setTimeout(() => { void load((currentFrame + 1) % heroSlides.length).catch(() => {}); }, 2000);
     const rotate = window.setTimeout(() => {
       manualRequest.current = false;
-      setRequested((frame.current + 1) % heroSlides.length);
+      setRequested((currentFrame + 1) % heroSlides.length);
     }, DWELL_MS);
     return () => { window.clearTimeout(preload); window.clearTimeout(rotate); };
-  }, [playing, pending, frame.current, frame.previous, load]);
+  }, [playing, pending, currentFrame, previousFrame, load]);
 
   useEffect(() => {
-    if (!playing && pending && !manualRequest.current) setRequested(frame.current);
-  }, [playing, pending, frame.current]);
+    if (!playing && pending && !manualRequest.current) setRequested(currentFrame);
+  }, [playing, pending, currentFrame]);
 
   useEffect(() => {
     if (!pending || (!manualRequest.current && !playing)) return;
@@ -97,16 +98,16 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
     }).catch(() => {
       if (cancelled) return;
       setError('Dieses Motiv konnte nicht geladen werden. Bitte wählen Sie eine andere Branche.');
-      setRequested(frame.current); setPaused(true);
+      setRequested(currentFrame); setPaused(true);
     });
     return () => { cancelled = true; };
-  }, [requested, pending, playing, frame.current, reducedMotion, load]);
+  }, [requested, pending, playing, currentFrame, reducedMotion, load]);
 
   useEffect(() => {
-    if (frame.previous === null) return;
+    if (previousFrame === null) return;
     const timer = window.setTimeout(() => setFrame(current => ({ ...current, previous: null })), reducedMotion ? 0 : FADE_MS);
     return () => window.clearTimeout(timer);
-  }, [frame.current, frame.previous, reducedMotion]);
+  }, [previousFrame, reducedMotion]);
 
   function choose(index: number) {
     manualRequest.current = true;
@@ -117,7 +118,7 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
   function toggle() {
     // Cancel a pending automatic request when pausing; resuming always gives a full dwell interval.
     manualRequest.current = false;
-    setRequested(frame.current); setError(''); setPaused(value => !value);
+    setRequested(currentFrame); setError(''); setPaused(value => !value);
   }
 
   return <section ref={section} className="hero cinematic-hero industry-hero" aria-labelledby="hero-title"
@@ -128,12 +129,11 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
       if (!(event.relatedTarget instanceof HTMLElement) || !event.relatedTarget.matches('input, textarea')) setEditing(false);
     }}>
     <div className="hero-media" id="hero-industry-image">
-      {[frame.previous, frame.current].filter((index): index is number => index !== null).map(index => <picture
+      {[previousFrame, currentFrame].filter((index): index is number => index !== null).map(index => <picture
         key={heroSlides[index].id}
-        className={`hero-frame ${index === frame.current ? 'is-current' : 'is-previous'} ${index === frame.current && frame.previous !== null ? 'is-entering' : ''}`}
-        aria-hidden={index !== frame.current}>
+        className={`hero-frame ${index === currentFrame ? 'is-current' : 'is-previous'} ${index === currentFrame && previousFrame !== null ? 'is-entering' : ''}`}>
         <source media="(max-width: 700px)" srcSet={heroImage(index, true)}/>
-        <img src={heroImage(index)} alt={index === frame.current ? heroSlides[index].alt : ''}
+        <img src={heroImage(index)} alt={index === currentFrame ? heroSlides[index].alt : ''}
           width="1920" height="1200" fetchPriority={index === 0 ? 'high' : 'auto'}
           decoding={index === 0 ? 'auto' : 'async'} style={{ objectPosition: heroSlides[index].position || '50% 50%' }}/>
       </picture>)}
@@ -141,7 +141,7 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
     {children}
     <div className="industry-strip" role="group" aria-roledescription="Bildfolge" aria-label="QONSUL Zielbranchen">
       <div className="industry-caption" aria-live={paused || reducedMotion ? 'polite' : 'off'} aria-atomic="true">
-        <span className="industry-kicker">INDUSTRIELLE QUALITÄT / <span>{String(frame.current + 1).padStart(2, '0')} — {heroSlides.length}</span></span>
+        <span className="industry-kicker">INDUSTRIELLE QUALITÄT / <span>{String(currentFrame + 1).padStart(2, '0')} — {heroSlides.length}</span></span>
         <strong>{slide.industry}</strong>
         <span className="industry-focus">{slide.focus}</span>
       </div>
@@ -163,8 +163,8 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
           <button type="button" aria-label="Nächstes Branchenmotiv" aria-controls="hero-industry-image" onFocus={() => setPaused(true)} onClick={() => choose(requested + 1)}>→</button>
         </div>
       </div>
-      <div className="industry-progress" aria-hidden="true"><i key={frame.current}
-        className={playing && !pending && frame.previous === null ? 'is-running' : ''}/></div>
+      <div className="industry-progress" aria-hidden="true"><i key={currentFrame}
+        className={playing && !pending && previousFrame === null ? 'is-running' : ''}/></div>
       <span className="industry-status" role="status" aria-live={pending || error ? 'polite' : 'off'}>{error || (pending ? 'Motiv wird geladen …' : editing ? 'Bildwechsel während der Eingabe pausiert' : '')}</span>
     </div>
   </section>;
