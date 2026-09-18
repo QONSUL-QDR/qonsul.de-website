@@ -1,4 +1,6 @@
 import Image from 'next/image';
 
-export default function Brand(){return <span className="brand-art"><Image src="/qonsul-logo-selected.png" alt="QONSUL Managementberatung" width={1448} height={1086}/></span>;}
-export function BrandMark(){return <span className="brand-symbol" aria-hidden="true"><Image src="/qonsul-logo-selected.png" alt="" width={1448} height={1086}/></span>;}
+const logoPath = '/qonsul-logo-selected.png';
+
+export default function Brand(){return <span className="brand-art"><Image src={logoPath} alt="QONSUL Managementberatung" width={1448} height={1086} unoptimized/></span>;}
+export function BrandMark(){return <span className="brand-symbol" aria-hidden="true"><Image src={logoPath} alt="" width={1448} height={1086} unoptimized/></span>;}
