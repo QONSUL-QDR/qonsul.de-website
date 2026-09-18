@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { readConsultationCorrectionLink, storeConsultationCorrectionLink } from '@/lib/consultation-correction-storage';
 
 const createToken = () => {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -18,6 +19,10 @@ export default function ManageRequestEmailPage() {
   const correctionId = useRef('');
   const nextToken = useRef('');
 
+  useEffect(() => {
+    readConsultationCorrectionLink();
+  }, []);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setNotice('');
     if (!correctionId.current) correctionId.current = crypto.randomUUID();
@@ -30,8 +35,7 @@ export default function ManageRequestEmailPage() {
       });
       const result = await response.json() as { error?: string; correctionPath?: string };
       if (!response.ok || !result.correctionPath) throw new Error(result.error);
-      const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
-      localStorage.setItem('qonsul-consultation-correction', JSON.stringify({ path: result.correctionPath, expiresAt }));
+      storeConsultationCorrectionLink(result.correctionPath);
       router.replace(result.correctionPath);
       setSuccess(true);
       setNotice('Die E-Mail-Adresse wurde korrigiert. Eine neue Bestätigungs-E-Mail wurde angefordert.');

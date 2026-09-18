@@ -234,7 +234,7 @@ assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length va
 assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
 assert.match(diagnosticUi,/Ihre Anfrage ist eingegangen\. Wir haben Ihnen eine Bestätigungs-E-Mail gesendet\./);
 assert.match(diagnosticUi,/E-Mail-Adresse korrigieren/);
-assert.match(diagnosticUi,/qonsul-consultation-correction/);
+assert.match(diagnosticUi,/readConsultationCorrectionLink\(\)/,'the Diagnostic page validates local correction-link expiry when reading storage');
 assert.match(diagnosticUi,/Die Beratungsanfrage konnte nicht übermittelt werden\. Bitte versuchen Sie es erneut\./);
 const correctionRoute=await readFile(new URL('../app/api/diagnostic-email-correction/route.ts',import.meta.url),'utf8');
 assert.match(correctionRoute,/rateLimit\(request, 'diagnostic-email-correction', 3\)/,'email correction has an independent IP rate limit');
@@ -244,6 +244,10 @@ assert.match(correctionPage,/Inhalte Ihrer Anfrage werden nicht angezeigt\./,'th
 assert.match(correctionPage,/ungültig oder abgelaufen/,'expired and reused links use a detail-free message');
 assert.match(correctionPage,/correctionId = useRef\(''\)/,'browser retries keep a stable correction event ID');
 assert.match(correctionPage,/nextToken = useRef\(''\)/,'browser retries keep the same rotated token');
+assert.match(correctionPage,/readConsultationCorrectionLink\(\)/,'the correction page validates local correction-link expiry on entry');
+const correctionStorage=await readFile(new URL('../lib/consultation-correction-storage.ts',import.meta.url),'utf8');
+assert.match(correctionStorage,/qonsul-consultation-correction/,'the correction link uses the established local-storage key');
+assert.match(correctionStorage,/stored\.expiresAt <= now[\s\S]*?localStorage\.removeItem/,'expired correction links are deleted during every read');
 const analyticsClient=await readFile(new URL('../app/analytics-client.tsx',import.meta.url),'utf8');
 assert.match(analyticsClient,/current\.startsWith\('\/anfrage-verwalten\/'\) \? '\/anfrage-verwalten\/\[token\]'/,'correction tokens are redacted before analytics events are built');
 const privacyPage=await readFile(new URL('../app/datenschutz/page.tsx',import.meta.url),'utf8');

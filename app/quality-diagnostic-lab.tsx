@@ -8,6 +8,7 @@ import { CONTACT_PRIVACY_VERSION } from '@/lib/contact';
 import { emitAnalyticsHook } from '@/lib/analytics-hooks';
 import { currentAnalyticsSessionId } from '@/lib/analytics-session';
 import { invalidateDraftSubmissionId, submissionIdForSave, withSavingState } from '@/lib/diagnostic-submission-lifecycle';
+import { readConsultationCorrectionLink, storeConsultationCorrectionLink } from '@/lib/consultation-correction-storage';
 
 const examples = ['Sporadische Ausfälle bei hohen Temperaturen', 'Steigende Ausschussquote in der Fertigung', 'Qualität schwankt zwischen Lieferchargen'];
 const initialStatus = { ai: false, productionReady: false };
@@ -80,10 +81,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
 
   useEffect(() => { fetch('/api/status').then(response => response.json() as Promise<typeof initialStatus>).then(setStatus).catch(() => {}); }, []);
   useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('qonsul-consultation-correction') || 'null') as { expiresAt?: number } | null;
-      if (!stored?.expiresAt || stored.expiresAt <= Date.now()) localStorage.removeItem('qonsul-consultation-correction');
-    } catch { localStorage.removeItem('qonsul-consultation-correction'); }
+    readConsultationCorrectionLink();
   }, []);
   function step(key: 'problem' | 'causes' | 'report', sequence: number) {
     if (!flowId.current || completedSteps.current.has(key)) return;
@@ -239,8 +237,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       }) });
       const result = await response.json() as { error?: string; status?: string; correctionPath?: string };
       if (!response.ok || !result.status || !result.correctionPath) throw new Error(result.error || 'Beratungsanfrage konnte nicht übermittelt werden.');
-      const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
-      localStorage.setItem('qonsul-consultation-correction', JSON.stringify({ path: result.correctionPath, expiresAt }));
+      storeConsultationCorrectionLink(result.correctionPath);
       setCorrectionPath(result.correctionPath);
       setConsultationNotice('Ihre Anfrage ist eingegangen. Wir haben Ihnen eine Bestätigungs-E-Mail gesendet.');
     } catch { setConsultationNotice('Die Beratungsanfrage konnte nicht übermittelt werden. Bitte versuchen Sie es erneut.'); } finally { setBusy(false); }
