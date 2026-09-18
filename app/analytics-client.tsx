@@ -12,7 +12,10 @@ const endpoint = process.env.NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT;
 const sessionKey = ANALYTICS_SESSION_STORAGE_KEY;
 
 function id(): string { return crypto.randomUUID(); }
-function path(): string { return window.location.pathname; }
+function path(): string {
+  const current = window.location.pathname;
+  return current.startsWith('/anfrage-verwalten/') ? '/anfrage-verwalten/[token]' : current;
+}
 function referrerHost(): string | undefined { try { return document.referrer ? new URL(document.referrer).hostname : undefined; } catch { return undefined; } }
 function attribution(): Record<string, string> | undefined {
   const values = Object.fromEntries(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].flatMap(key => {

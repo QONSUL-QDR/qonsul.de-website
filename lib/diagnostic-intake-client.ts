@@ -58,7 +58,14 @@ export async function deliverDiagnostic(event: Record<string, unknown>, options:
 
 export async function requestDiagnosticConsultation(event: Record<string, unknown>, options: Options) {
   const response = await post('/api/v1/intake/diagnostic/consultation', event, options);
-  const result = await response.json() as { status?: string; diagnostic_id?: string };
-  if (!result.diagnostic_id || !['resolved', 'pending_review', 'pending'].includes(result.status || '')) throw new DiagnosticDeliveryError('Unexpected consultation response.', false, response.status);
-  return { status: result.status as 'resolved' | 'pending_review' | 'pending', diagnosticId: result.diagnostic_id };
+  const result = await response.json() as { status?: string; diagnostic_id?: string; correction_token?: string };
+  if (!result.diagnostic_id || !result.correction_token || !['resolved', 'pending_review', 'pending'].includes(result.status || '')) throw new DiagnosticDeliveryError('Unexpected consultation response.', false, response.status);
+  return { status: result.status as 'resolved' | 'pending_review' | 'pending', diagnosticId: result.diagnostic_id, correctionToken: result.correction_token };
+}
+
+export async function correctDiagnosticConsultationEmail(event: Record<string, unknown>, options: Options) {
+  const response = await post('/api/v1/intake/diagnostic/consultation/email-correction', event, options);
+  const result = await response.json() as { status?: string; correction_token?: string };
+  if (result.status !== 'accepted' || !result.correction_token) throw new DiagnosticDeliveryError('Unexpected correction response.', false, response.status);
+  return { correctionToken: result.correction_token };
 }
