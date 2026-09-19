@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ANALYTICS_CONSENT_STORAGE_KEY, type AnalyticsConsentState, parseAnalyticsConsent } from '@/lib/analytics-consent';
 
 function notifyAnalyticsConsent(granted: boolean): void {
@@ -10,6 +11,7 @@ function notifyAnalyticsConsent(granted: boolean): void {
 export function AnalyticsConsent(): React.ReactNode {
   const [state, setState] = useState<AnalyticsConsentState>('unknown');
   const [settingsOpen, setSettingsOpen] = useState(true);
+  const [portalEnabled, setPortalEnabled] = useState(false);
 
   useEffect(() => {
     const stored = parseAnalyticsConsent(window.localStorage.getItem(ANALYTICS_CONSENT_STORAGE_KEY));
@@ -17,6 +19,7 @@ export function AnalyticsConsent(): React.ReactNode {
     const frame = window.requestAnimationFrame(() => {
       setState(stored);
       setSettingsOpen(stored === 'unknown');
+      setPortalEnabled(true);
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -29,13 +32,11 @@ export function AnalyticsConsent(): React.ReactNode {
     notifyAnalyticsConsent(granted);
   };
 
-  if (!settingsOpen) {
-    return <button className="analytics-consent-status" type="button" onClick={() => setSettingsOpen(true)}>
+  const control = !settingsOpen ? (
+    <button className="analytics-consent-status" type="button" onClick={() => setSettingsOpen(true)}>
       Website-Analyse: {state === 'granted' ? 'aktiv' : 'deaktiviert'}
-    </button>;
-  }
-
-  return <aside className="analytics-consent" aria-label="Optionale Website-Analyse">
+    </button>
+  ) : <aside className="analytics-consent" aria-label="Optionale Website-Analyse">
     <p className="eyebrow">OPTIONALE WEBSITE-ANALYSE</p>
     <p>Mit Ihrer Zustimmung messen wir ausschließlich pseudonyme Nutzungsereignisse zur Verbesserung dieser Website – ohne Cookies, ohne Ihre Kontakt- oder Analyseinhalte. Diese Einwilligung ist getrennt von Einwilligungen zum Kontaktformular oder zur Ishikawa-Analyse und wird nicht für andere Zwecke verwendet. Ihre Entscheidung hat keinen Einfluss auf die Nutzbarkeit des Kontaktformulars oder der Ishikawa-Analyse.</p>
     <div className="analytics-consent-actions">
@@ -44,4 +45,10 @@ export function AnalyticsConsent(): React.ReactNode {
     </div>
     {state !== 'unknown' && <p className="analytics-consent-note">Ihre Auswahl kann hier jederzeit geändert oder widerrufen werden.</p>}
   </aside>;
+
+  const footerSlot = portalEnabled && typeof document !== 'undefined'
+    ? document.getElementById('analytics-consent-slot')
+    : null;
+
+  return footerSlot ? createPortal(control, footerSlot) : control;
 }

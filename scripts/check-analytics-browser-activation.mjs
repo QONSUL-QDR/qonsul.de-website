@@ -50,7 +50,7 @@ assert.deepEqual(
   { id: existingId, createdAt: now, touchedAt: now },
 );
 
-const [client, consent, ishikawa, contact, reports, crm, privacy] = await Promise.all([
+const [client, consent, ishikawa, contact, reports, crm, privacy, layout, qualitySite, styles] = await Promise.all([
   readFile(new URL('../app/analytics-client.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../app/analytics-consent.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../app/ishikawa-lab.tsx', import.meta.url), 'utf8'),
@@ -58,6 +58,9 @@ const [client, consent, ishikawa, contact, reports, crm, privacy] = await Promis
   readFile(new URL('../app/api/reports/route.ts', import.meta.url), 'utf8'),
   readFile(new URL('../lib/crm.ts', import.meta.url), 'utf8'),
   readFile(new URL('../app/datenschutz/page.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../app/layout.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../app/quality-site.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../app/globals.css', import.meta.url), 'utf8'),
 ]);
 
 assert.match(client, /qonsul:analytics-consent/);
@@ -75,6 +78,12 @@ assert.match(client, /diagnostic_flow_id/);
 assert.doesNotMatch(client, /problem_statement|cause_text|contact_message/);
 assert.match(consent, /localStorage\.setItem\(ANALYTICS_CONSENT_STORAGE_KEY, next\)/);
 assert.match(consent, /notifyAnalyticsConsent\(granted\)/);
+assert.match(consent, /createPortal\(control, footerSlot\)/);
+assert.match(layout, /\{children\}<AnalyticsConsent \/>/);
+assert.match(qualitySite, /id="analytics-consent-slot"/);
+assert.doesNotMatch(styles, /\.analytics-consent-status\{position:fixed/);
+assert.doesNotMatch(styles, /\.analytics-consent\{position:fixed/);
+assert.match(styles, /\.analytics-consent-slot\{display:flex;justify-content:flex-end/);
 assert.match(ishikawa, /emitAnalyticsHook\('diagnostic_started'/);
 assert.match(ishikawa, /analyticsSessionId:currentAnalyticsSessionId\(\)/);
 assert.match(ishikawa, /diagnosticFlowId:diagnosticFlowId\.current/);

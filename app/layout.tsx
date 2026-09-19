@@ -23,4 +23,4 @@ export async function generateMetadata(): Promise<Metadata> {
     twitter: { card: 'summary_large_image', title: 'QONSUL — Data · Quality · Risk', description: 'Qualität verstehen. Risiken vorausdenken. Datengetriebenes Qualitäts- und Risikomanagement für die Produktentwicklung.', images: [og] },
   };
 }
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="de"><body><AnalyticsClient /><AnalyticsConsent />{children}</body></html>; }
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="de"><body><AnalyticsClient />{children}<AnalyticsConsent /></body></html>; }
