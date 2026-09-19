@@ -20,4 +20,6 @@ for(const asset of manifest.assets){
 }
 const publicFiles=files.filter(file=>file.startsWith('public/')).sort();
 assert.deepEqual(manifest.assets.map(asset=>asset.path).sort(),publicFiles,'All public assets must be included in the handoff inventory');
+const brandSource=await readFile('app/brand.tsx','utf8');
+assert.match(brandSource,/export default function Brand\(\)[\s\S]*loading="eager"[\s\S]*fetchPriority="high"/,'The above-the-fold QONSUL logo loads eagerly at high priority');
 console.log(`PASS Repository hygiene and integrity of ${manifest.assets.length} public assets (not a complete security audit)`);
