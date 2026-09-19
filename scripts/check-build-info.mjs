@@ -14,8 +14,11 @@ const [viteConfig, buildInfo, statusRoute] = await Promise.all([
 ]);
 
 assert.match(viteConfig, /__QONSUL_BUILD_COMMIT_SHA__/, 'vite.config.ts inlines the build commit SHA');
+assert.match(viteConfig, /execFileSync\('git', \['rev-parse', 'HEAD\^\{tree\}'\]/, 'tree SHA lookup bypasses shell escaping');
 assert.match(buildInfo, /export const BUILD_COMMIT_SHA/, 'lib/build-info.ts exports the commit identifier');
+assert.match(buildInfo, /export const BUILD_TREE_SHA/, 'lib/build-info.ts exports the tree identifier');
 assert.match(statusRoute, /commit\s*:\s*BUILD_COMMIT_SHA/, 'GET /api/status exposes the commit identifier');
+assert.match(statusRoute, /git_tree\s*:\s*BUILD_TREE_SHA/, 'GET /api/status exposes the tree identifier');
 
 const { BUILD_COMMIT_SHA } = await import('../lib/build-info.ts');
 assert.equal(typeof BUILD_COMMIT_SHA, 'string', 'BUILD_COMMIT_SHA is always a string, even outside a Vite build');

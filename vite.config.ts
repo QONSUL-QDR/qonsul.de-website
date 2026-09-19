@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
@@ -23,7 +23,7 @@ function resolveBuildCommitSha(): string {
     process.env.SOURCE_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || process.env.GITHUB_SHA;
   if (fromEnv) return fromEnv;
   try {
-    return execSync('git rev-parse HEAD', { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] })
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .trim();
   } catch {
@@ -31,7 +31,18 @@ function resolveBuildCommitSha(): string {
   }
 }
 const buildCommitSha = resolveBuildCommitSha();
-function resolveBuildTreeSha(): string { try { return execSync('git rev-parse HEAD^{tree}', { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return 'unknown'; } }
+function resolveBuildTreeSha(): string {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD^{tree}'], {
+      cwd: process.cwd(),
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+  } catch {
+    return 'unknown';
+  }
+}
 const buildTreeSha = resolveBuildTreeSha();
 
 const { d1, r2 } = hostingConfig;
