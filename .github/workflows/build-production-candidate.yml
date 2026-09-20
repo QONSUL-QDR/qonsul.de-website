@@ -1,0 +1,204 @@
+name: Build production candidate artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Protected annotated production-candidate tag
+        required: true
+        type: string
+      expected_commit:
+        description: Full commit SHA peeled from the tag
+        required: true
+        type: string
+      expected_tree:
+        description: Full Git tree SHA for the peeled commit
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful CI run ID for the peeled commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-artifact-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate protected release source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      tag_object: ${{ steps.provenance.outputs.tag_object }}
+      commit: ${{ steps.provenance.outputs.commit }}
+      tree: ${{ steps.provenance.outputs.tree }}
+      control_commit: ${{ steps.provenance.outputs.control_commit }}
+    steps:
+      - name: Control checkout from the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Verify control workflow boundaries
+        run: node control/scripts/check-production-artifact-workflow.mjs
+      - name: Fetch and validate the protected annotated tag
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          node control/scripts/validate-production-artifact-inputs.mjs "${RELEASE_TAG}" "${EXPECTED_COMMIT}" "${EXPECTED_TREE}" "${CI_RUN_ID}"
+          git -C control fetch --no-tags --depth=1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${CI_RUN_ID}" > "${RUNNER_TEMP}/ci-run.json"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/rulesets" > "${RUNNER_TEMP}/rulesets.json"
+          RULESET_ID="$(node control/scripts/select-production-tag-ruleset.mjs "${RUNNER_TEMP}/rulesets.json")"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/rulesets/${RULESET_ID}" > "${RUNNER_TEMP}/ruleset.json"
+          (cd control && node scripts/verify-production-candidate.mjs \
+            --tag "${RELEASE_TAG}" \
+            --expected-commit "${EXPECTED_COMMIT}" \
+            --expected-tree "${EXPECTED_TREE}" \
+            --ci-run-id "${CI_RUN_ID}" \
+            --ci-json "${RUNNER_TEMP}/ci-run.json" \
+            --ruleset-json "${RUNNER_TEMP}/ruleset.json") > "${RUNNER_TEMP}/provenance.json"
+          TAG_OBJECT="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.tagObject)" "${RUNNER_TEMP}/provenance.json")"
+          COMMIT="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.commit)" "${RUNNER_TEMP}/provenance.json")"
+          TREE="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.tree)" "${RUNNER_TEMP}/provenance.json")"
+          printf 'tag_object=%s\n' "${TAG_OBJECT}" >> "$GITHUB_OUTPUT"
+          printf 'commit=%s\n' "${COMMIT}" >> "$GITHUB_OUTPUT"
+          printf 'tree=%s\n' "${TREE}" >> "$GITHUB_OUTPUT"
+          echo "control_commit=$(git -C control rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and seal candidate artifact
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production-artifact
+    steps:
+      - name: Control checkout from the default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Candidate checkout from the validated tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.release_tag }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Recheck candidate commit and tree
+        env:
+          EXPECTED_COMMIT: ${{ needs.validate.outputs.commit }}
+          EXPECTED_TREE: ${{ needs.validate.outputs.tree }}
+        run: |
+          set -euo pipefail
+          test "$(git -C candidate rev-parse HEAD)" = "${EXPECTED_COMMIT}"
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = "${EXPECTED_TREE}"
+      - name: Validate production-only non-secret build configuration
+        env:
+          PRODUCTION_WORKER_NAME: ${{ vars.PRODUCTION_WORKER_NAME }}
+          PRODUCTION_D1_DATABASE_ID: ${{ vars.PRODUCTION_D1_DATABASE_ID }}
+          PRODUCTION_D1_DATABASE_NAME: ${{ vars.PRODUCTION_D1_DATABASE_NAME }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+        run: node control/scripts/verify-production-environment.mjs
+      - name: Install candidate dependencies reproducibly
+        working-directory: candidate
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Prepare only the isolated local test database
+        working-directory: candidate
+        run: env -u CF_D1_DATABASE_ID -u CF_D1_DATABASE_NAME -u PUBLIC_SITE_URL pnpm setup:local
+      - name: Run candidate typecheck, tests, integration tests, and lint
+        working-directory: candidate
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm test:integration
+          pnpm lint
+      - name: Build the validated candidate with its true source identity
+        working-directory: candidate
+        env:
+          SOURCE_COMMIT_SHA: ${{ needs.validate.outputs.commit }}
+          CF_D1_DATABASE_ID: ${{ vars.PRODUCTION_D1_DATABASE_ID }}
+          CF_D1_DATABASE_NAME: ${{ vars.PRODUCTION_D1_DATABASE_NAME }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+        run: pnpm build
+      - name: Validate the Worker locally without credentials or deployment
+        working-directory: candidate
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+          WRANGLER_WRITE_LOGS: 'false'
+          WRANGLER_LOG_PATH: .wrangler/logs
+          PRODUCTION_WORKER_NAME: ${{ vars.PRODUCTION_WORKER_NAME }}
+        run: pnpm exec wrangler deploy --dry-run --config dist/server/wrangler.json --name "${PRODUCTION_WORKER_NAME}" --outdir "${RUNNER_TEMP}/wrangler-dry-run"
+      - name: Record non-secret build tool versions
+        working-directory: candidate
+        run: |
+          echo "ARTIFACT_PNPM_VERSION=$(pnpm --version)" >> "$GITHUB_ENV"
+          echo "ARTIFACT_WRANGLER_VERSION=$(pnpm exec wrangler --version)" >> "$GITHUB_ENV"
+      - name: Seal the allowlisted artifact and manifest
+        id: seal
+        env:
+          PRODUCTION_WORKER_NAME: ${{ vars.PRODUCTION_WORKER_NAME }}
+          PRODUCTION_D1_DATABASE_ID: ${{ vars.PRODUCTION_D1_DATABASE_ID }}
+          PRODUCTION_D1_DATABASE_NAME: ${{ vars.PRODUCTION_D1_DATABASE_NAME }}
+          PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
+        run: |
+          set -euo pipefail
+          node control/scripts/seal-production-artifact.mjs \
+            --candidate-dir candidate \
+            --output-dir "${RUNNER_TEMP}/release" \
+            --tag "${{ inputs.release_tag }}" \
+            --tag-object "${{ needs.validate.outputs.tag_object }}" \
+            --commit "${{ needs.validate.outputs.commit }}" \
+            --tree "${{ needs.validate.outputs.tree }}" \
+            --ci-run-id "${{ inputs.ci_run_id }}" \
+            --control-commit "${{ needs.validate.outputs.control_commit }}" | tee "${RUNNER_TEMP}/seal.json"
+          ARCHIVE_SHA256="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.archiveSha256)" "${RUNNER_TEMP}/seal.json")"
+          printf 'archive_sha256=%s\n' "${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
+      - name: Upload immutable candidate artifact
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-candidate-${{ inputs.release_tag }}-${{ needs.validate.outputs.commit }}
+          path: |
+            ${{ runner.temp }}/release/website-production-candidate.tar.gz
+            ${{ runner.temp }}/release/release-manifest.json
+          if-no-files-found: error
+          overwrite: false
+          retention-days: 90
+      - name: Publish immutable artifact digests to the job summary
+        run: |
+          {
+            echo '## Production candidate artifact'
+            echo ''
+            echo "- Tag: \`${{ inputs.release_tag }}\`"
+            echo "- Commit: \`${{ needs.validate.outputs.commit }}\`"
+            echo "- Tree: \`${{ needs.validate.outputs.tree }}\`"
+            echo "- Archive SHA-256: \`${{ steps.seal.outputs.archive_sha256 }}\`"
+            echo "- GitHub Artifact digest: \`${{ steps.upload.outputs.artifact-digest }}\`"
+            echo '- Deployment: not performed'
+          } >> "$GITHUB_STEP_SUMMARY"
