@@ -19,7 +19,10 @@
     "check:repository": "node scripts/check-repository.mjs",
     "test:api": "node scripts/check-api.mjs",
     "test:pdf": "node scripts/check-ishikawa-pdf.mjs",
-    "pdf:sample": "node scripts/create-pdf-sample.mjs"
+    "pdf:sample": "node scripts/create-pdf-sample.mjs",
+    "check:production-artifact-workflow": "node scripts/check-production-artifact-workflow.mjs",
+    "release:verify-candidate": "node scripts/verify-production-candidate.mjs",
+    "release:seal-artifact": "node scripts/seal-production-artifact.mjs"
   },
   "dependencies": {
     "next": "16.3.4",
