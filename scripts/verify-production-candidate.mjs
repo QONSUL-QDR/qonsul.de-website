@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises';
 import {
   assertReleaseInputs,
   assertReleaseTagRuleset,
-  assertSuccessfulCiRun,
+  assertSuccessfulRequiredCiRun,
   assertTagMessage,
+  buildIdFor,
   parseAnnotatedTag,
 } from '../lib/production-artifact.mjs';
 
@@ -19,6 +20,7 @@ const expectedCommit = readArgument('--expected-commit');
 const expectedTree = readArgument('--expected-tree');
 const ciRunId = readArgument('--ci-run-id');
 const ciJson = readArgument('--ci-json');
+const ciWorkflowJson = readArgument('--ci-workflow-json');
 const rulesetJson = readArgument('--ruleset-json');
 const ref = `refs/tags/${tag}`;
 
@@ -36,7 +38,8 @@ if (parsedTag.tag !== tag || parsedTag.object !== expectedCommit || peeledCommit
 }
 
 assertTagMessage(parsedTag.message, { commit: expectedCommit, tree: expectedTree, ciRunId });
-assertSuccessfulCiRun(JSON.parse(await readFile(ciJson, 'utf8')), expectedCommit);
+const ciWorkflow = JSON.parse(await readFile(ciWorkflowJson, 'utf8'));
+assertSuccessfulRequiredCiRun(JSON.parse(await readFile(ciJson, 'utf8')), ciWorkflow, expectedCommit);
 assertReleaseTagRuleset(JSON.parse(await readFile(rulesetJson, 'utf8')));
 
 process.stdout.write(`${JSON.stringify({
@@ -45,4 +48,7 @@ process.stdout.write(`${JSON.stringify({
   commit: expectedCommit,
   tree: expectedTree,
   ciRunId: String(ciRunId),
+  ciWorkflowId: ciWorkflow.id,
+  ciWorkflowPath: ciWorkflow.path,
+  buildId: buildIdFor(expectedCommit, expectedTree),
 })}\n`);

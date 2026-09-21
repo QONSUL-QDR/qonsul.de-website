@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   assertArtifactEntries,
+  assertArtifactFileManifest,
   assertProductionEnvironment,
   buildReleaseManifest,
+  buildIdFor,
   sha256,
 } from '../lib/production-artifact.mjs';
 
@@ -22,6 +24,8 @@ const provenance = {
   commit: readArgument('--commit'),
   tree: readArgument('--tree'),
   ciRunId: readArgument('--ci-run-id'),
+  ciWorkflowId: Number(readArgument('--ci-workflow-id')),
+  ciWorkflowPath: readArgument('--ci-workflow-path'),
 };
 const controlCommit = readArgument('--control-commit');
 const workerName = process.env.PRODUCTION_WORKER_NAME || '';
@@ -30,6 +34,7 @@ const d1DatabaseName = process.env.PRODUCTION_D1_DATABASE_NAME || '';
 const publicSiteUrl = process.env.PUBLIC_SITE_URL || '';
 
 assertProductionEnvironment({ workerName, d1DatabaseId, d1DatabaseName, publicSiteUrl });
+buildIdFor(provenance.commit, provenance.tree);
 
 const workerConfigPath = path.join(candidateDir, 'dist', 'server', 'wrangler.json');
 const workerConfig = JSON.parse(await readFile(workerConfigPath, 'utf8'));
@@ -44,9 +49,38 @@ workerConfig.name = workerName;
 workerConfig.topLevelName = workerName;
 await writeFile(workerConfigPath, `${JSON.stringify(workerConfig)}\n`);
 
+function assertSafeArtifactPath(relativePath) {
+  if (!relativePath || relativePath.includes('..') || path.isAbsolute(relativePath) || relativePath.includes('\\')) {
+    throw new Error(`Unsafe artifact payload path: ${relativePath}`);
+  }
+}
+
+async function collectRegularFiles(root, relative = '') {
+  const entries = await readdir(path.join(root, relative), { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const entryRelative = path.posix.join(relative.replaceAll('\\', '/'), entry.name);
+    assertSafeArtifactPath(entryRelative);
+    const entryPath = path.join(root, entryRelative);
+    const entryStat = await lstat(entryPath);
+    if (entryStat.isSymbolicLink()) throw new Error(`Symbolic links are forbidden in artifact payloads: ${entryRelative}`);
+    if (entryStat.isDirectory()) {
+      files.push(...await collectRegularFiles(root, entryRelative));
+    } else if (entryStat.isFile()) {
+      const bytes = await readFile(entryPath);
+      files.push({ path: entryRelative, type: 'file', sha256: sha256(bytes), size_bytes: bytes.length });
+    } else {
+      throw new Error(`Artifact payload entry is not a regular file: ${entryRelative}`);
+    }
+  }
+  return files;
+}
+
 await mkdir(outputDir, { recursive: false });
 const payloadDir = path.join(outputDir, 'payload');
 await mkdir(payloadDir);
+// Reject links and special files in the candidate output before any copy or archive operation.
+await collectRegularFiles(path.join(candidateDir, 'dist'));
 await cp(path.join(candidateDir, 'dist'), path.join(payloadDir, 'dist'), { recursive: true, force: false });
 
 const tools = {
@@ -61,8 +95,10 @@ const metadata = {
   commit: provenance.commit,
   tree: provenance.tree,
   ci_run_id: provenance.ciRunId,
+  ci_workflow_id: provenance.ciWorkflowId,
+  ci_workflow_path: provenance.ciWorkflowPath,
   control_commit: controlCommit,
-  build_id: `${provenance.commit}:${provenance.tree}`,
+  build_id: buildIdFor(provenance.commit, provenance.tree),
   public_site_url: publicSiteUrl,
   binding_fingerprints: {
     worker_name_sha256: sha256(workerName),
@@ -72,6 +108,9 @@ const metadata = {
   tools,
 };
 await writeFile(path.join(payloadDir, 'release-metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`);
+
+const artifactFiles = (await collectRegularFiles(payloadDir)).sort((left, right) => left.path.localeCompare(right.path));
+assertArtifactFileManifest(artifactFiles);
 
 const archiveFile = 'website-production-candidate.tar.gz';
 const archivePath = path.join(outputDir, archiveFile);
@@ -93,6 +132,7 @@ const manifest = buildReleaseManifest({
   archiveFile,
   archiveSha256,
   archiveSize,
+  artifactFiles,
   tools,
 });
 await writeFile(path.join(outputDir, 'release-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);

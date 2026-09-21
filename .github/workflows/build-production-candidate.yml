@@ -37,6 +37,9 @@ jobs:
       tag_object: ${{ steps.provenance.outputs.tag_object }}
       commit: ${{ steps.provenance.outputs.commit }}
       tree: ${{ steps.provenance.outputs.tree }}
+      build_id: ${{ steps.provenance.outputs.build_id }}
+      ci_workflow_id: ${{ steps.provenance.outputs.ci_workflow_id }}
+      ci_workflow_path: ${{ steps.provenance.outputs.ci_workflow_path }}
       control_commit: ${{ steps.provenance.outputs.control_commit }}
     steps:
       - name: Control checkout from the default branch
@@ -67,6 +70,10 @@ jobs:
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml" > "${RUNNER_TEMP}/ci-workflow.json"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
             "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/rulesets" > "${RUNNER_TEMP}/rulesets.json"
           RULESET_ID="$(node control/scripts/select-production-tag-ruleset.mjs "${RUNNER_TEMP}/rulesets.json")"
           curl --fail-with-body --silent --show-error \
@@ -79,14 +86,23 @@ jobs:
             --expected-tree "${EXPECTED_TREE}" \
             --ci-run-id "${CI_RUN_ID}" \
             --ci-json "${RUNNER_TEMP}/ci-run.json" \
+            --ci-workflow-json "${RUNNER_TEMP}/ci-workflow.json" \
             --ruleset-json "${RUNNER_TEMP}/ruleset.json") > "${RUNNER_TEMP}/provenance.json"
           TAG_OBJECT="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.tagObject)" "${RUNNER_TEMP}/provenance.json")"
           COMMIT="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.commit)" "${RUNNER_TEMP}/provenance.json")"
           TREE="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.tree)" "${RUNNER_TEMP}/provenance.json")"
+          BUILD_ID="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.buildId)" "${RUNNER_TEMP}/provenance.json")"
+          CI_WORKFLOW_ID="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(String(p.ciWorkflowId))" "${RUNNER_TEMP}/provenance.json")"
+          CI_WORKFLOW_PATH="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.ciWorkflowPath)" "${RUNNER_TEMP}/provenance.json")"
+          CONTROL_COMMIT="$(git -C control rev-parse HEAD)"
+          git -C control cat-file -e "${CONTROL_COMMIT}^{commit}"
           printf 'tag_object=%s\n' "${TAG_OBJECT}" >> "$GITHUB_OUTPUT"
           printf 'commit=%s\n' "${COMMIT}" >> "$GITHUB_OUTPUT"
           printf 'tree=%s\n' "${TREE}" >> "$GITHUB_OUTPUT"
-          echo "control_commit=$(git -C control rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          printf 'build_id=%s\n' "${BUILD_ID}" >> "$GITHUB_OUTPUT"
+          printf 'ci_workflow_id=%s\n' "${CI_WORKFLOW_ID}" >> "$GITHUB_OUTPUT"
+          printf 'ci_workflow_path=%s\n' "${CI_WORKFLOW_PATH}" >> "$GITHUB_OUTPUT"
+          printf 'control_commit=%s\n' "${CONTROL_COMMIT}" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build and seal candidate artifact
@@ -96,13 +112,20 @@ jobs:
     environment:
       name: production-artifact
     steps:
-      - name: Control checkout from the default branch
+      - name: Immutable control checkout from validated commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ needs.validate.outputs.control_commit }}
           path: control
           fetch-depth: 1
           persist-credentials: false
+      - name: Revalidate immutable control checkout
+        env:
+          EXPECTED_CONTROL_COMMIT: ${{ needs.validate.outputs.control_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git -C control rev-parse HEAD)" = "${EXPECTED_CONTROL_COMMIT}"
+          git -C control cat-file -e "${EXPECTED_CONTROL_COMMIT}^{commit}"
       - name: Candidate checkout from the validated tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -142,6 +165,9 @@ jobs:
         working-directory: candidate
         env:
           SOURCE_COMMIT_SHA: ${{ needs.validate.outputs.commit }}
+          SOURCE_BUILD_ID: ${{ needs.validate.outputs.build_id }}
+          PRODUCTION_ARTIFACT_BUILD: 'true'
+          PRODUCTION_ANALYTICS_ENDPOINT: https://cockpit.qonsul.de/api/v1/analytics/events
           CF_D1_DATABASE_ID: ${{ vars.PRODUCTION_D1_DATABASE_ID }}
           CF_D1_DATABASE_NAME: ${{ vars.PRODUCTION_D1_DATABASE_NAME }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
@@ -159,6 +185,13 @@ jobs:
         run: |
           echo "ARTIFACT_PNPM_VERSION=$(pnpm --version)" >> "$GITHUB_ENV"
           echo "ARTIFACT_WRANGLER_VERSION=$(pnpm exec wrangler --version)" >> "$GITHUB_ENV"
+      - name: Revalidate immutable control checkout before sealing
+        env:
+          EXPECTED_CONTROL_COMMIT: ${{ needs.validate.outputs.control_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git -C control rev-parse HEAD)" = "${EXPECTED_CONTROL_COMMIT}"
+          git -C control cat-file -e "${EXPECTED_CONTROL_COMMIT}^{commit}"
       - name: Seal the allowlisted artifact and manifest
         id: seal
         env:
@@ -176,6 +209,8 @@ jobs:
             --commit "${{ needs.validate.outputs.commit }}" \
             --tree "${{ needs.validate.outputs.tree }}" \
             --ci-run-id "${{ inputs.ci_run_id }}" \
+            --ci-workflow-id "${{ needs.validate.outputs.ci_workflow_id }}" \
+            --ci-workflow-path "${{ needs.validate.outputs.ci_workflow_path }}" \
             --control-commit "${{ needs.validate.outputs.control_commit }}" | tee "${RUNNER_TEMP}/seal.json"
           ARCHIVE_SHA256="$(node -e "const p=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(p.archiveSha256)" "${RUNNER_TEMP}/seal.json")"
           printf 'archive_sha256=%s\n' "${ARCHIVE_SHA256}" >> "$GITHUB_OUTPUT"
@@ -198,6 +233,8 @@ jobs:
             echo "- Tag: \`${{ inputs.release_tag }}\`"
             echo "- Commit: \`${{ needs.validate.outputs.commit }}\`"
             echo "- Tree: \`${{ needs.validate.outputs.tree }}\`"
+            echo "- Build ID: \`${{ needs.validate.outputs.build_id }}\`"
+            echo "- CI workflow: \`${{ needs.validate.outputs.ci_workflow_path }}\` (ID \`${{ needs.validate.outputs.ci_workflow_id }}\`)"
             echo "- Archive SHA-256: \`${{ steps.seal.outputs.archive_sha256 }}\`"
             echo "- GitHub Artifact digest: \`${{ steps.upload.outputs.artifact-digest }}\`"
             echo '- Deployment: not performed'
