@@ -48,12 +48,14 @@ assertReleaseTagRuleset(ruleset);
 assert.throws(() => assertReleaseTagRuleset({ ...ruleset, current_user_can_bypass: 'always' }));
 
 assertProductionEnvironment({
-  workerName: 'qonsul-production',
-  d1DatabaseId: '11111111-2222-4333-8444-555555555555',
-  d1DatabaseName: 'qonsul-production-d1',
+  workerName: 'qonsul-de',
+  d1DatabaseId: 'eb2a5897-3116-43f9-88c2-79434ceddc43',
+  d1DatabaseName: 'qonsul-website-d1',
   publicSiteUrl: 'https://qonsul.de',
 });
-assert.throws(() => assertProductionEnvironment({ workerName: 'qonsul-quality-engineering', d1DatabaseId: '11111111-2222-4333-8444-555555555555', d1DatabaseName: 'qonsul-production-d1', publicSiteUrl: 'https://qonsul.de' }));
+assert.throws(() => assertProductionEnvironment({ workerName: 'qonsul-quality-engineering', d1DatabaseId: 'eb2a5897-3116-43f9-88c2-79434ceddc43', d1DatabaseName: 'qonsul-website-d1', publicSiteUrl: 'https://qonsul.de' }));
+assert.throws(() => assertProductionEnvironment({ workerName: 'qonsul-de', d1DatabaseId: '11111111-2222-4333-8444-555555555555', d1DatabaseName: 'qonsul-website-d1', publicSiteUrl: 'https://qonsul.de' }));
+assert.throws(() => assertProductionEnvironment({ workerName: 'qonsul-de', d1DatabaseId: 'eb2a5897-3116-43f9-88c2-79434ceddc43', d1DatabaseName: 'qonsul-website-d1-staging', publicSiteUrl: 'https://qonsul.de' }));
 assertArtifactEntries(['dist/', 'dist/server/wrangler.json', 'release-metadata.json']);
 assert.throws(() => assertArtifactEntries(['.env', 'release-metadata.json']));
 const artifactFiles = [
@@ -70,9 +72,9 @@ assert.throws(() => assertProductionAnalyticsEndpoint('https://staging.qonsul.de
 const manifest = buildReleaseManifest({
   provenance: { tag, tagObject: 'a'.repeat(40), commit, tree, ciRunId, ciWorkflowId: 42, ciWorkflowPath: '.github/workflows/ci.yml' },
   controlCommit: 'b'.repeat(40),
-  workerName: 'qonsul-production',
-  d1DatabaseId: '11111111-2222-4333-8444-555555555555',
-  d1DatabaseName: 'qonsul-production-d1',
+  workerName: 'qonsul-de',
+  d1DatabaseId: 'eb2a5897-3116-43f9-88c2-79434ceddc43',
+  d1DatabaseName: 'qonsul-website-d1',
   archiveFile: 'candidate.tar.gz',
   archiveSha256: 'c'.repeat(64),
   archiveSize: 42,
@@ -89,7 +91,7 @@ try {
   const candidateDir = path.join(artifactTestRoot, 'candidate');
   const serverDir = path.join(candidateDir, 'dist', 'server');
   await mkdir(serverDir, { recursive: true });
-  await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify({ d1_databases: [{ binding: 'DB', database_id: '11111111-2222-4333-8444-555555555555', database_name: 'qonsul-production-d1' }] }));
+  await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify({ d1_databases: [{ binding: 'DB', database_id: 'eb2a5897-3116-43f9-88c2-79434ceddc43', database_name: 'qonsul-website-d1' }] }));
   await writeFile(path.join(serverDir, 'index.js'), 'export default {};\n');
   try {
     await symlink('index.js', path.join(serverDir, 'forbidden-link.js'), 'file');
@@ -99,7 +101,7 @@ try {
   }
   let symlinkError;
   try {
-    execFileSync(process.execPath, [path.resolve('scripts/seal-production-artifact.mjs'), '--candidate-dir', candidateDir, '--output-dir', path.join(artifactTestRoot, 'output'), '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)], { env: { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-production', PRODUCTION_D1_DATABASE_ID: '11111111-2222-4333-8444-555555555555', PRODUCTION_D1_DATABASE_NAME: 'qonsul-production-d1', PUBLIC_SITE_URL: 'https://qonsul.de' }, stdio: 'pipe' });
+    execFileSync(process.execPath, [path.resolve('scripts/seal-production-artifact.mjs'), '--candidate-dir', candidateDir, '--output-dir', path.join(artifactTestRoot, 'output'), '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)], { env: { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-de', PRODUCTION_D1_DATABASE_ID: 'eb2a5897-3116-43f9-88c2-79434ceddc43', PRODUCTION_D1_DATABASE_NAME: 'qonsul-website-d1', PUBLIC_SITE_URL: 'https://qonsul.de' }, stdio: 'pipe' });
   } catch (error) {
     symlinkError = error;
   }
