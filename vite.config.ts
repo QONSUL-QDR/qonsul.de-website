@@ -3,11 +3,22 @@ import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json';
+import { assertProductionAnalyticsEndpoint } from './lib/production-artifact.mjs';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
 
 const { d1, r2 } = hostingConfig;
+const isProductionArtifactBuild = process.env.PRODUCTION_ARTIFACT_BUILD === 'true';
+const sourceCommit = process.env.SOURCE_COMMIT_SHA || '';
+const sourceBuildId = process.env.SOURCE_BUILD_ID || '';
+
+// The existing Sites project is a preview-hosting control plane. Artifact builds
+// must not infer a telemetry destination from it: without a verifiable endpoint
+// contract, the Sites plugin is deliberately excluded.
+if (isProductionArtifactBuild) {
+  assertProductionAnalyticsEndpoint(process.env.PRODUCTION_ANALYTICS_ENDPOINT);
+}
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
@@ -57,13 +68,17 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
+    define: {
+      __QONSUL_SOURCE_COMMIT_SHA__: JSON.stringify(sourceCommit),
+      __QONSUL_SOURCE_BUILD_ID__: JSON.stringify(sourceBuildId),
+    },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
     plugins: [
       vinext(),
-      sites(),
+      ...(isProductionArtifactBuild ? [] : [sites()]),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
         config: localBindingConfig,

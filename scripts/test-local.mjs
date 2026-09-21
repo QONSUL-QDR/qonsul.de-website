@@ -15,7 +15,7 @@ const pkg=JSON.parse(await readFile(path.join(root,'node_modules/vinext/package.
 await mkdir(path.join(root,'.wrangler'),{recursive:true});
 const log=await open(path.join(root,'.wrangler/integration-server.log'),'w');
 const server=spawn(process.execPath,[path.join(root,'node_modules/vinext',pkg.bin.vinext),'dev','--port',String(port)],
-  {cwd:root,stdio:['ignore',log.fd,log.fd],detached:process.platform!=='win32',env:{...process.env,WRANGLER_SEND_METRICS:'false'}});
+  {cwd:root,stdio:['ignore',log.fd,log.fd],detached:process.platform!=='win32',env:{...process.env,WRANGLER_SEND_METRICS:'false',SOURCE_COMMIT_SHA:'cef82619f109424df2f18028272b6619fad121fc',SOURCE_BUILD_ID:'cef82619f109424df2f18028272b6619fad121fc:9a8c2488b7da5f4e447ce930973b076671576e36'}});
 let spawnError;
 server.on('error',error=>{spawnError=error;});
 async function stop(){

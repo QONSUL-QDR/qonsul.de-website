@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   assertArtifactEntries,
+  assertArtifactFileManifest,
+  assertProductionAnalyticsEndpoint,
   assertProductionEnvironment,
   assertReleaseInputs,
   assertReleaseTagRuleset,
   assertTagMessage,
+  assertSuccessfulRequiredCiRun,
+  buildIdFor,
   buildReleaseManifest,
   parseAnnotatedTag,
   selectReleaseTagRuleset,
@@ -15,6 +22,7 @@ const commit = 'cef82619f109424df2f18028272b6619fad121fc';
 const tree = '9a8c2488b7da5f4e447ce930973b076671576e36';
 const tag = 'website-production-candidate-2026-09-20';
 const ciRunId = '35520678135';
+const ciWorkflow = { id: 42, path: '.github/workflows/ci.yml' };
 
 assertReleaseInputs({ tag, commit, tree, ciRunId });
 assert.throws(() => assertReleaseInputs({ tag: 'main', commit, tree, ciRunId }));
@@ -23,6 +31,9 @@ const parsed = parseAnnotatedTag(`object ${commit}\ntype commit\ntag ${tag}\ntag
 assert.equal(parsed.object, commit);
 assertTagMessage(parsed.message, { commit, tree, ciRunId });
 assert.throws(() => assertTagMessage('Commit: wrong', { commit, tree, ciRunId }));
+assertSuccessfulRequiredCiRun({ status: 'completed', conclusion: 'success', head_sha: commit, workflow_id: 42, path: '.github/workflows/ci.yml' }, ciWorkflow, commit);
+assert.throws(() => assertSuccessfulRequiredCiRun({ status: 'completed', conclusion: 'success', head_sha: commit, workflow_id: 99, path: '.github/workflows/other.yml' }, ciWorkflow, commit));
+assert.equal(buildIdFor(commit, tree), `${commit}:${tree}`);
 
 const ruleset = {
   id: 1,
@@ -45,9 +56,19 @@ assertProductionEnvironment({
 assert.throws(() => assertProductionEnvironment({ workerName: 'qonsul-quality-engineering', d1DatabaseId: '11111111-2222-4333-8444-555555555555', d1DatabaseName: 'qonsul-production-d1', publicSiteUrl: 'https://qonsul.de' }));
 assertArtifactEntries(['dist/', 'dist/server/wrangler.json', 'release-metadata.json']);
 assert.throws(() => assertArtifactEntries(['.env', 'release-metadata.json']));
+const artifactFiles = [
+  { path: 'dist/server/index.js', type: 'file', sha256: 'd'.repeat(64), size_bytes: 12 },
+  { path: 'release-metadata.json', type: 'file', sha256: 'e'.repeat(64), size_bytes: 4 },
+];
+assertArtifactFileManifest(artifactFiles);
+assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], type: 'symlink' }, artifactFiles[1]]));
+assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], path: '../outside' }, artifactFiles[1]]));
+assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], path: '/outside' }, artifactFiles[1]]));
+assertProductionAnalyticsEndpoint('https://cockpit.qonsul.de/api/v1/analytics/events');
+assert.throws(() => assertProductionAnalyticsEndpoint('https://staging.qonsul.de/api/v1/analytics/events'));
 
 const manifest = buildReleaseManifest({
-  provenance: { tag, tagObject: 'a'.repeat(40), commit, tree, ciRunId },
+  provenance: { tag, tagObject: 'a'.repeat(40), commit, tree, ciRunId, ciWorkflowId: 42, ciWorkflowPath: '.github/workflows/ci.yml' },
   controlCommit: 'b'.repeat(40),
   workerName: 'qonsul-production',
   d1DatabaseId: '11111111-2222-4333-8444-555555555555',
@@ -55,20 +76,56 @@ const manifest = buildReleaseManifest({
   archiveFile: 'candidate.tar.gz',
   archiveSha256: 'c'.repeat(64),
   archiveSize: 42,
+  artifactFiles,
   tools: { node: 'v24.0.0', pnpm: '11.19.0', wrangler: '4.0.0' },
 });
 assert.equal(manifest.commit, commit);
 assert.equal(manifest.artifact.payload_allowlist[0], 'dist/**');
+assert.equal(manifest.ci_workflow_path, '.github/workflows/ci.yml');
+assert.equal(manifest.artifact.files.length, 2);
+
+const artifactTestRoot = await mkdtemp(path.join(tmpdir(), 'qonsul-artifact-test-'));
+try {
+  const candidateDir = path.join(artifactTestRoot, 'candidate');
+  const serverDir = path.join(candidateDir, 'dist', 'server');
+  await mkdir(serverDir, { recursive: true });
+  await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify({ d1_databases: [{ binding: 'DB', database_id: '11111111-2222-4333-8444-555555555555', database_name: 'qonsul-production-d1' }] }));
+  await writeFile(path.join(serverDir, 'index.js'), 'export default {};\n');
+  try {
+    await symlink('index.js', path.join(serverDir, 'forbidden-link.js'), 'file');
+  } catch (error) {
+    if (error?.code !== 'EPERM') throw error;
+    await symlink(serverDir, path.join(candidateDir, 'dist', 'forbidden-link'), 'junction');
+  }
+  let symlinkError;
+  try {
+    execFileSync(process.execPath, [path.resolve('scripts/seal-production-artifact.mjs'), '--candidate-dir', candidateDir, '--output-dir', path.join(artifactTestRoot, 'output'), '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)], { env: { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-production', PRODUCTION_D1_DATABASE_ID: '11111111-2222-4333-8444-555555555555', PRODUCTION_D1_DATABASE_NAME: 'qonsul-production-d1', PUBLIC_SITE_URL: 'https://qonsul.de' }, stdio: 'pipe' });
+  } catch (error) {
+    symlinkError = error;
+  }
+  assert.ok(symlinkError, 'Artifact sealing must reject a payload symlink.');
+  assert.match(String(symlinkError.stderr), /Symbolic links are forbidden/);
+} finally {
+  await rm(artifactTestRoot, { recursive: true, force: true });
+}
 
 const workflow = await readFile(new URL('../.github/workflows/build-production-candidate.yml', import.meta.url), 'utf8');
+const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
 assert.match(workflow, /workflow_dispatch:/);
 assert.doesNotMatch(workflow, /^\s*(push|pull_request):/m);
 assert.match(workflow, /path:\s*control/);
 assert.match(workflow, /path:\s*candidate/);
 assert.match(workflow, /validate-production-artifact-inputs\.mjs[\s\S]*git -C control fetch/);
 assert.match(workflow, /SOURCE_COMMIT_SHA/);
+assert.match(workflow, /SOURCE_BUILD_ID/);
+assert.match(workflow, /ci\.yml/);
+assert.match(workflow, /PRODUCTION_ARTIFACT_BUILD/);
+assert.match(workflow, /PRODUCTION_ANALYTICS_ENDPOINT/);
 assert.match(workflow, /deploy --dry-run/);
 assert.doesNotMatch(workflow, /wrangler\s+deploy(?!\s+--dry-run)/);
+assert.match(viteConfig, /assertProductionAnalyticsEndpoint/);
+assert.match(viteConfig, /isProductionArtifactBuild \? \[\] : \[sites\(\)\]/);
+assert.match(viteConfig, /__QONSUL_SOURCE_COMMIT_SHA__/);
 for (const forbidden of ['CLOUDFLARE_API_TOKEN', 'RESEND_API_KEY', 'OPENAI_API_KEY', 'QONSUL_COCKPIT_INTAKE_SECRET']) {
   assert.doesNotMatch(workflow, new RegExp(forbidden));
 }
