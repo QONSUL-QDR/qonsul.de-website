@@ -33,7 +33,7 @@ The build job uses the protected GitHub Environment `production-artifact`. It re
 
 No Cloudflare API token, Cockpit secret, Resend key, OpenAI key, webhook secret, or application runtime secret may be available to this workflow. Runtime secrets remain exclusively in the later Production Worker configuration.
 
-The workflow rejects blank values, placeholder IDs, obvious staging/preview Worker names, the known local/staging D1 name, and any non-canonical public URL. It derives `build_id` as `${commit}:${tree}` before the build, and supplies that ID together with `SOURCE_COMMIT_SHA` as non-secret build constants. `/api/status` exposes only this candidate commit and build ID when present.
+The workflow fail-closes on every binding deviation. The approved Production Worker is `qonsul-de`; its approved `DB` binding is `qonsul-website-d1` with the Owner-confirmed database UUID. The former generic rejection of that name was removed because the Owner verified it as the live binding. Staging databases, placeholders, and every Worker, D1 ID, D1 name, or public URL deviation are rejected. It derives `build_id` as `${commit}:${tree}` before the build, and supplies that ID together with `SOURCE_COMMIT_SHA` as non-secret build constants. `/api/status` exposes only this candidate commit and build ID when present.
 
 The existing Sites plugin uses a preview-hosting project configuration without a verifiable analytics endpoint. For `PRODUCTION_ARTIFACT_BUILD=true` it is therefore disabled. The build accepts only `https://cockpit.qonsul.de/api/v1/analytics/events` as its explicit analytics endpoint configuration; a staging, preview, Workers, blank, or any other endpoint aborts the build before plugin setup. The artifact build does not send analytics events.
 
