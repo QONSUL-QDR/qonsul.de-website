@@ -124,6 +124,11 @@ assert.match(workflow, /SOURCE_BUILD_ID/);
 assert.match(workflow, /ci\.yml/);
 assert.match(workflow, /PRODUCTION_ARTIFACT_BUILD/);
 assert.match(workflow, /PRODUCTION_ANALYTICS_ENDPOINT/);
+assert.match(workflow, /name:\s*Enable the versioned pnpm with Corepack[\s\S]*working-directory:\s*candidate[\s\S]*corepack enable[\s\S]*packageManager\.replace\(\/\^pnpm@\/,[\s\S]*corepack pnpm --version/);
+assert.match(workflow, /Enable the versioned pnpm with Corepack[\s\S]*corepack pnpm install --frozen-lockfile --ignore-scripts/);
+for (const command of ['install --frozen-lockfile --ignore-scripts', 'setup:local', 'typecheck', 'test', 'test:integration', 'lint', 'build', 'exec wrangler deploy --dry-run', 'exec wrangler --version']) {
+  assert.match(workflow, new RegExp(`corepack pnpm ${command.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}`));
+}
 assert.match(workflow, /deploy --dry-run/);
 assert.doesNotMatch(workflow, /wrangler\s+deploy(?!\s+--dry-run)/);
 assert.match(viteConfig, /assertProductionAnalyticsEndpoint/);
