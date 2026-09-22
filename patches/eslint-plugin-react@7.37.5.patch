@@ -1,0 +1,44 @@
+diff --git a/lib/util/eslint.js b/lib/util/eslint.js
+index 79a0537f3b4f52b04b29d46e89ce00f6da8fe579..87a91e0f818672547ce872262734f1ee8e96684c 100644
+--- a/lib/util/eslint.js
++++ b/lib/util/eslint.js
+@@ -4,6 +4,10 @@ function getSourceCode(context) {
+   return context.getSourceCode ? context.getSourceCode() : context.sourceCode;
+ }
+ 
++function getFilename(context) {
++  return typeof context.getFilename === 'function' ? context.getFilename() : context.filename;
++}
++
+ function getAncestors(context, node) {
+   const sourceCode = getSourceCode(context);
+   return sourceCode.getAncestors ? sourceCode.getAncestors(node) : context.getAncestors();
+@@ -38,6 +42,7 @@ function getText(context) {
+ 
+ module.exports = {
+   getAncestors,
++  getFilename,
+   getFirstTokens,
+   getScope,
+   getSourceCode,
+diff --git a/lib/util/version.js b/lib/util/version.js
+index c9dc683b7d149c5a3a941bdcbd32f657facdfbf6..2bfbf2ecd751c2ef83df7738d70026321d777d8a 100644
+--- a/lib/util/version.js
++++ b/lib/util/version.js
+@@ -11,6 +11,7 @@ const path = require('path');
+ const resolve = require('resolve');
+ const semver = require('semver');
+ const error = require('./error');
++const getFilename = require('./eslint').getFilename;
+ 
+ const ULTIMATE_LATEST_SEMVER = '999.999.999';
+ 
+@@ -28,7 +29,7 @@ function resetDetectedVersion() {
+ 
+ function resolveBasedir(contextOrFilename) {
+   if (contextOrFilename) {
+-    const filename = typeof contextOrFilename === 'string' ? contextOrFilename : contextOrFilename.getFilename();
++    const filename = typeof contextOrFilename === 'string' ? contextOrFilename : getFilename(contextOrFilename);
+     const dirname = path.dirname(filename);
+     try {
+       if (fs.statSync(filename).isFile()) {

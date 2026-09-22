@@ -3,3 +3,6 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
   workerd: false
+
+patchedDependencies:
+  eslint-plugin-react@7.37.5: patches/eslint-plugin-react@7.37.5.patch
