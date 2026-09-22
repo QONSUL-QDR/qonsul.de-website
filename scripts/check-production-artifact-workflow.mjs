@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -101,7 +102,7 @@ try {
   }
   let symlinkError;
   try {
-    execFileSync(process.execPath, [path.resolve('scripts/seal-production-artifact.mjs'), '--candidate-dir', candidateDir, '--output-dir', path.join(artifactTestRoot, 'output'), '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)], { env: { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-de', PRODUCTION_D1_DATABASE_ID: 'eb2a5897-3116-43f9-88c2-79434ceddc43', PRODUCTION_D1_DATABASE_NAME: 'qonsul-website-d1', PUBLIC_SITE_URL: 'https://qonsul.de' }, stdio: 'pipe' });
+    execFileSync(process.execPath, [fileURLToPath(new URL('./seal-production-artifact.mjs', import.meta.url)), '--candidate-dir', candidateDir, '--output-dir', path.join(artifactTestRoot, 'output'), '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)], { env: { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-de', PRODUCTION_D1_DATABASE_ID: 'eb2a5897-3116-43f9-88c2-79434ceddc43', PRODUCTION_D1_DATABASE_NAME: 'qonsul-website-d1', PUBLIC_SITE_URL: 'https://qonsul.de' }, stdio: 'pipe' });
   } catch (error) {
     symlinkError = error;
   }
