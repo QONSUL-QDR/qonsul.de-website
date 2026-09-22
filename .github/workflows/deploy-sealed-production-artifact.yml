@@ -1,0 +1,215 @@
+name: Deploy sealed production artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: Exact immutable GitHub Artifact name
+        required: true
+        type: string
+      release_tag:
+        description: Protected annotated production-candidate tag
+        required: true
+        type: string
+      expected_commit:
+        description: Full commit SHA peeled from the tag
+        required: true
+        type: string
+      expected_tree:
+        description: Full Git tree SHA for the peeled commit
+        required: true
+        type: string
+      artifact_digest:
+        description: Exact sha256:<hex> GitHub Artifact digest
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  deployments: read
+
+concurrency:
+  group: production-deployment-${{ inputs.release_tag }}-${{ inputs.expected_commit }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate sealed artifact before deployment access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      tag_object: ${{ steps.provenance.outputs.tag_object }}
+      ci_run_id: ${{ steps.provenance.outputs.ci_run_id }}
+      ci_workflow_id: ${{ steps.provenance.outputs.ci_workflow_id }}
+      ci_workflow_path: ${{ steps.provenance.outputs.ci_workflow_path }}
+      control_commit: ${{ steps.control.outputs.commit }}
+    steps:
+      - name: Require dispatch from main
+        run: test "${GITHUB_REF}" = refs/heads/main
+      - name: Immutable control checkout from main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Record immutable control commit
+        id: control
+        run: |
+          set -euo pipefail
+          CONTROL_COMMIT="$(git -C control rev-parse HEAD)"
+          git -C control cat-file -e "${CONTROL_COMMIT}^{commit}"
+          printf 'commit=%s\n' "${CONTROL_COMMIT}" >> "$GITHUB_OUTPUT"
+      - name: Verify deployment control workflow boundaries
+        run: node control/scripts/check-production-deployment-workflow.mjs
+      - name: Validate manual deployment inputs
+        run: node control/scripts/validate-production-deployment-inputs.mjs "${{ inputs.artifact_name }}" "${{ inputs.release_tag }}" "${{ inputs.expected_commit }}" "${{ inputs.expected_tree }}" "${{ inputs.artifact_digest }}"
+      - name: Fetch and revalidate the protected Candidate tag and CI provenance
+        id: provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          set -euo pipefail
+          git -C control fetch --no-tags --depth=1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          node control/scripts/read-production-candidate-tag.mjs control "${RELEASE_TAG}" > "${RUNNER_TEMP}/tag.json"
+          CI_RUN_ID="$(node -e 'const p=require(process.argv[1]);process.stdout.write(p.ciRunId)' "${RUNNER_TEMP}/tag.json")"
+          TAG_OBJECT="$(node -e 'const p=require(process.argv[1]);process.stdout.write(p.tagObject)' "${RUNNER_TEMP}/tag.json")"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs/${CI_RUN_ID}" > "${RUNNER_TEMP}/ci-run.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml" > "${RUNNER_TEMP}/ci-workflow.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/rulesets" > "${RUNNER_TEMP}/rulesets.json"
+          RULESET_ID="$(node control/scripts/select-production-tag-ruleset.mjs "${RUNNER_TEMP}/rulesets.json")"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/rulesets/${RULESET_ID}" > "${RUNNER_TEMP}/ruleset.json"
+          (cd control && node scripts/verify-production-candidate.mjs --tag "${RELEASE_TAG}" --expected-commit "${EXPECTED_COMMIT}" --expected-tree "${EXPECTED_TREE}" --ci-run-id "${CI_RUN_ID}" --ci-json "${RUNNER_TEMP}/ci-run.json" --ci-workflow-json "${RUNNER_TEMP}/ci-workflow.json" --ruleset-json "${RUNNER_TEMP}/ruleset.json") > "${RUNNER_TEMP}/provenance.json"
+          CI_WORKFLOW_ID="$(node -e 'const p=require(process.argv[1]);process.stdout.write(String(p.ciWorkflowId))' "${RUNNER_TEMP}/provenance.json")"
+          CI_WORKFLOW_PATH="$(node -e 'const p=require(process.argv[1]);process.stdout.write(p.ciWorkflowPath)' "${RUNNER_TEMP}/provenance.json")"
+          printf 'tag_object=%s\n' "${TAG_OBJECT}" >> "$GITHUB_OUTPUT"
+          printf 'ci_run_id=%s\n' "${CI_RUN_ID}" >> "$GITHUB_OUTPUT"
+          printf 'ci_workflow_id=%s\n' "${CI_WORKFLOW_ID}" >> "$GITHUB_OUTPUT"
+          printf 'ci_workflow_path=%s\n' "${CI_WORKFLOW_PATH}" >> "$GITHUB_OUTPUT"
+      - name: Download only the digest-bound GitHub Artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_NAME: ${{ inputs.artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --get -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" --data-urlencode "name=${ARTIFACT_NAME}" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts" > "${RUNNER_TEMP}/artifacts.json"
+          node control/scripts/select-sealed-github-artifact.mjs "${RUNNER_TEMP}/artifacts.json" "${ARTIFACT_NAME}" "${ARTIFACT_DIGEST}" > "${RUNNER_TEMP}/artifact.json"
+          ARTIFACT_ID="$(node -e 'const p=require(process.argv[1]);process.stdout.write(String(p.id))' "${RUNNER_TEMP}/artifact.json")"
+          curl --fail-with-body --silent --show-error --location -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" --output "${RUNNER_TEMP}/artifact.zip"
+          mapfile -t ENTRIES < <(unzip -Z1 "${RUNNER_TEMP}/artifact.zip")
+          test "${#ENTRIES[@]}" -eq 2
+          test "${ENTRIES[0]}" = website-production-candidate.tar.gz -o "${ENTRIES[1]}" = website-production-candidate.tar.gz
+          test "${ENTRIES[0]}" = release-manifest.json -o "${ENTRIES[1]}" = release-manifest.json
+          unzip -p "${RUNNER_TEMP}/artifact.zip" website-production-candidate.tar.gz > "${RUNNER_TEMP}/website-production-candidate.tar.gz"
+          unzip -p "${RUNNER_TEMP}/artifact.zip" release-manifest.json > "${RUNNER_TEMP}/release-manifest.json"
+      - name: Verify archive hash, every file hash, manifest, Worker, and DB binding
+        run: |
+          node control/scripts/verify-sealed-production-artifact.mjs \
+            --archive "${RUNNER_TEMP}/website-production-candidate.tar.gz" \
+            --manifest "${RUNNER_TEMP}/release-manifest.json" \
+            --tag "${{ inputs.release_tag }}" \
+            --tag-object "${{ steps.provenance.outputs.tag_object }}" \
+            --commit "${{ inputs.expected_commit }}" \
+            --tree "${{ inputs.expected_tree }}" \
+            --ci-run-id "${{ steps.provenance.outputs.ci_run_id }}" \
+            --ci-workflow-id "${{ steps.provenance.outputs.ci_workflow_id }}" \
+            --ci-workflow-path "${{ steps.provenance.outputs.ci_workflow_path }}"
+      - name: Stage only the revalidated deployment payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: validated-production-deployment-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/website-production-candidate.tar.gz
+            ${{ runner.temp }}/release-manifest.json
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    name: Deploy verified artifact to the approved Worker
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: production-deployment
+    outputs:
+      rollback_evidence_url: ${{ steps.evidence.outputs.rollback_evidence_url }}
+    steps:
+      - name: Immutable deployment control checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.validate.outputs.control_commit }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Revalidate immutable deployment control checkout
+        env:
+          EXPECTED_CONTROL_COMMIT: ${{ needs.validate.outputs.control_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git -C control rev-parse HEAD)" = "${EXPECTED_CONTROL_COMMIT}"
+          git -C control cat-file -e "${EXPECTED_CONTROL_COMMIT}^{commit}"
+      - name: Download only the validated deployment payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: validated-production-deployment-${{ github.run_id }}
+          path: deploy
+      - name: Reverify the staged payload before credential access
+        run: |
+          node control/scripts/verify-sealed-production-artifact.mjs \
+            --archive deploy/website-production-candidate.tar.gz \
+            --manifest deploy/release-manifest.json \
+            --tag "${{ inputs.release_tag }}" \
+            --tag-object "${{ needs.validate.outputs.tag_object }}" \
+            --commit "${{ inputs.expected_commit }}" \
+            --tree "${{ inputs.expected_tree }}" \
+            --ci-run-id "${{ needs.validate.outputs.ci_run_id }}" \
+            --ci-workflow-id "${{ needs.validate.outputs.ci_workflow_id }}" \
+            --ci-workflow-path "${{ needs.validate.outputs.ci_workflow_path }}" \
+            --output-dir deploy/payload
+      - name: Fail closed unless Environment reviewers and main-only policy exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/environments/production-deployment" > "${RUNNER_TEMP}/environment.json"
+          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/environments/production-deployment/deployment-branch-policies?per_page=100" > "${RUNNER_TEMP}/branch-policies.json"
+          node control/scripts/verify-production-deployment-environment.mjs "${RUNNER_TEMP}/environment.json" "${RUNNER_TEMP}/branch-policies.json"
+      - name: Fail closed unless D1 backup and rollback evidence are present
+        id: evidence
+        env:
+          PRODUCTION_D1_BACKUP_EVIDENCE_URL: ${{ vars.PRODUCTION_D1_BACKUP_EVIDENCE_URL }}
+          PRODUCTION_ROLLBACK_EVIDENCE_URL: ${{ vars.PRODUCTION_ROLLBACK_EVIDENCE_URL }}
+        run: |
+          node control/scripts/verify-production-deployment-evidence.mjs
+          printf 'rollback_evidence_url=%s\n' "${PRODUCTION_ROLLBACK_EVIDENCE_URL}" >> "$GITHUB_OUTPUT"
+      - name: Deploy only the sealed Worker bundle
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDFLARE_API_TOKEN:-}" || { echo 'Production Cloudflare credential is not configured.' >&2; exit 1; }
+          corepack enable
+          corepack pnpm dlx --package wrangler@4.127.1 wrangler deploy --config deploy/payload/dist/server/wrangler.json --name qonsul-de
+
+  smoke:
+    name: Smoke test deployed Production identity
+    needs: [validate, deploy]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PRODUCTION_ROLLBACK_EVIDENCE_URL: ${{ needs.deploy.outputs.rollback_evidence_url }}
+    steps:
+      - name: Immutable smoke-test control checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.validate.outputs.control_commit }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Public HTTPS smoke tests only
+        run: node control/scripts/verify-production-smoke.mjs "${{ inputs.expected_commit }}" "${{ inputs.expected_tree }}"
