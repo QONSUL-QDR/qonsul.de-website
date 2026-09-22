@@ -114,6 +114,17 @@ try {
 
 const workflow = await readFile(new URL('../.github/workflows/build-production-candidate.yml', import.meta.url), 'utf8');
 const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
+const corepackBootstrapMatch = workflow.match(/- name: Enable the versioned pnpm with Corepack\r?\n\s+working-directory: candidate\r?\n\s+run: \|\r?\n((?: {10}.+\r?\n)+) {6}- name: Install candidate dependencies reproducibly/);
+assert.ok(corepackBootstrapMatch, 'The Corepack bootstrap step must be present before candidate dependency installation.');
+const corepackBootstrap = corepackBootstrapMatch[1].replace(/^ {10}/gm, '');
+assert.match(corepackBootstrap, /node -p 'require\("\.\/package\.json"\)\.packageManager\.replace\(\/\^pnpm@\/, ""\)'/);
+assert.doesNotMatch(corepackBootstrap, /\\"require\(/);
+if (process.platform === 'linux') {
+  execFileSync('bash', ['-e', '-u', '-o', 'pipefail', '-c', corepackBootstrap], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)),
+    stdio: 'pipe',
+  });
+}
 assert.match(workflow, /workflow_dispatch:/);
 assert.doesNotMatch(workflow, /^\s*(push|pull_request):/m);
 assert.match(workflow, /path:\s*control/);
