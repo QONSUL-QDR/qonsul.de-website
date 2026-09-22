@@ -113,6 +113,7 @@ try {
 }
 
 const workflow = await readFile(new URL('../.github/workflows/build-production-candidate.yml', import.meta.url), 'utf8');
+const ciWorkflowFile = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const viteConfig = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
 const corepackBootstrapMatch = workflow.match(/- name: Enable the versioned pnpm with Corepack\r?\n\s+working-directory: candidate\r?\n\s+run: \|\r?\n((?: {10}.+\r?\n)+) {6}- name: Install candidate dependencies reproducibly/);
 assert.ok(corepackBootstrapMatch, 'The Corepack bootstrap step must be present before candidate dependency installation.');
@@ -142,6 +143,7 @@ for (const command of ['install --frozen-lockfile --ignore-scripts', 'setup:loca
 }
 assert.match(workflow, /deploy --dry-run/);
 assert.doesNotMatch(workflow, /wrangler\s+deploy(?!\s+--dry-run)/);
+assert.match(ciWorkflowFile, /- run: pnpm test:integration\r?\n\s+- run: pnpm lint\r?\n\s+- run: pnpm build/);
 assert.match(viteConfig, /assertProductionAnalyticsEndpoint/);
 assert.match(viteConfig, /isProductionArtifactBuild \? \[\] : \[sites\(\)\]/);
 assert.match(viteConfig, /__QONSUL_SOURCE_COMMIT_SHA__/);

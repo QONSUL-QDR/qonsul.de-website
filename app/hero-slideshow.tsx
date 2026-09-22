@@ -1,46 +1,57 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { heroImage, heroSlides } from '@/lib/hero-slides';
 
 const DWELL_MS = 8000;
 const FADE_MS = 1200;
+const subscribeNever = () => () => {};
+const falseSnapshot = () => false;
+const trueSnapshot = () => true;
+
+function subscribeToReducedMotion(onChange: () => void) {
+  const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  motion.addEventListener('change', onChange);
+  return () => motion.removeEventListener('change', onChange);
+}
+
+function reducedMotionSnapshot() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function subscribeToVisibility(onChange: () => void) {
+  document.addEventListener('visibilitychange', onChange);
+  return () => document.removeEventListener('visibilitychange', onChange);
+}
+
+function visibilitySnapshot() {
+  return !document.hidden;
+}
 
 export default function HeroSlideshow({ children }: { children: ReactNode }) {
   const section = useRef<HTMLElement>(null);
   const cache = useRef(new Map<string, Promise<void>>());
-  const manualRequest = useRef(false);
   const [frame, setFrame] = useState<{ current: number; previous: number | null }>({ current: 0, previous: null });
   const [requested, setRequested] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [visible, setVisible] = useState(true);
+  const [paused, setPaused] = useState(() => typeof navigator !== 'undefined' && Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData));
   const [inView, setInView] = useState(true);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [manualRequest, setManualRequest] = useState(false);
+  const ready = useSyncExternalStore(subscribeNever, trueSnapshot, falseSnapshot);
+  const reducedMotion = useSyncExternalStore(subscribeToReducedMotion, reducedMotionSnapshot, falseSnapshot);
+  const visible = useSyncExternalStore(subscribeToVisibility, visibilitySnapshot, trueSnapshot);
+  const { current, previous } = frame;
   const playing = ready && !paused && !reducedMotion && visible && inView && !editing;
-  const slide = heroSlides[frame.current];
-  const pending = requested !== frame.current;
+  const slide = heroSlides[current];
+  const pending = requested !== current;
 
   useEffect(() => {
-    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const syncMotion = () => setReducedMotion(motion.matches);
-    const syncVisibility = () => setVisible(!document.hidden);
-    syncMotion(); syncVisibility(); setReady(true);
-    // Respect the browser's optional data-saving preference as well.
-    if ((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData) setPaused(true);
-    motion.addEventListener('change', syncMotion);
-    document.addEventListener('visibilitychange', syncVisibility);
     const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(
       ([entry]) => setInView(entry.isIntersecting), { threshold: 0.1 },
     );
     if (section.current) observer?.observe(section.current);
-    return () => {
-      motion.removeEventListener('change', syncMotion);
-      document.removeEventListener('visibilitychange', syncVisibility);
-      observer?.disconnect();
-    };
+    return () => observer?.disconnect();
   }, []);
 
   const load = useCallback((index: number) => {
@@ -68,51 +79,47 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!playing || pending || frame.previous !== null) return;
+    if (!playing || pending || previous !== null) return;
     // Fetch only the next motif after the first viewport has had time to load.
-    const preload = window.setTimeout(() => { void load((frame.current + 1) % heroSlides.length).catch(() => {}); }, 2000);
+    const preload = window.setTimeout(() => { void load((current + 1) % heroSlides.length).catch(() => {}); }, 2000);
     const rotate = window.setTimeout(() => {
-      manualRequest.current = false;
-      setRequested((frame.current + 1) % heroSlides.length);
+      setManualRequest(false);
+      setRequested((current + 1) % heroSlides.length);
     }, DWELL_MS);
     return () => { window.clearTimeout(preload); window.clearTimeout(rotate); };
-  }, [playing, pending, frame.current, frame.previous, load]);
+  }, [playing, pending, current, previous, load]);
 
   useEffect(() => {
-    if (!playing && pending && !manualRequest.current) setRequested(frame.current);
-  }, [playing, pending, frame.current]);
-
-  useEffect(() => {
-    if (!pending || (!manualRequest.current && !playing)) return;
+    if (!pending || (!manualRequest && !playing)) return;
     let cancelled = false;
-    load(requested).then(() => {
+    void load(requested).then(() => {
       if (cancelled) return;
-      setFrame(current => ({ current: requested, previous: reducedMotion ? null : current.current }));
+      setFrame(value => ({ current: requested, previous: reducedMotion ? null : value.current }));
       setError('');
     }).catch(() => {
       if (cancelled) return;
       setError('Dieses Motiv konnte nicht geladen werden. Bitte wählen Sie eine andere Branche.');
-      setRequested(frame.current); setPaused(true);
+      setRequested(current); setPaused(true);
     });
     return () => { cancelled = true; };
-  }, [requested, pending, playing, frame.current, reducedMotion, load]);
+  }, [requested, pending, manualRequest, playing, current, reducedMotion, load]);
 
   useEffect(() => {
-    if (frame.previous === null) return;
-    const timer = window.setTimeout(() => setFrame(current => ({ ...current, previous: null })), reducedMotion ? 0 : FADE_MS);
+    if (previous === null) return;
+    const timer = window.setTimeout(() => setFrame(value => ({ ...value, previous: null })), reducedMotion ? 0 : FADE_MS);
     return () => window.clearTimeout(timer);
-  }, [frame.current, frame.previous, reducedMotion]);
+  }, [current, previous, reducedMotion]);
 
   function choose(index: number) {
-    manualRequest.current = true;
+    setManualRequest(true);
     setPaused(true); setError('');
     setRequested((index + heroSlides.length) % heroSlides.length);
   }
 
   function toggle() {
     // Cancel a pending automatic request when pausing; resuming always gives a full dwell interval.
-    manualRequest.current = false;
-    setRequested(frame.current); setError(''); setPaused(value => !value);
+    setManualRequest(false);
+    setRequested(current); setError(''); setPaused(value => !value);
   }
 
   return <section ref={section} className="hero cinematic-hero industry-hero" aria-labelledby="hero-title"
@@ -123,12 +130,12 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
       if (!(event.relatedTarget instanceof HTMLElement) || !event.relatedTarget.matches('input, textarea')) setEditing(false);
     }}>
     <div className="hero-media" id="hero-industry-image">
-      {[frame.previous, frame.current].filter((index): index is number => index !== null).map(index => <picture
+      {[previous, current].filter((index): index is number => index !== null).map(index => <picture
         key={heroSlides[index].id}
-        className={`hero-frame ${index === frame.current ? 'is-current' : 'is-previous'} ${index === frame.current && frame.previous !== null ? 'is-entering' : ''}`}
-        aria-hidden={index !== frame.current}>
+        className={`hero-frame ${index === current ? 'is-current' : 'is-previous'} ${index === current && previous !== null ? 'is-entering' : ''}`}
+        aria-hidden={index !== current}>
         <source media="(max-width: 700px)" srcSet={heroImage(index, true)}/>
-        <img src={heroImage(index)} alt={index === frame.current ? heroSlides[index].alt : ''}
+        <img src={heroImage(index)} alt={index === current ? heroSlides[index].alt : ''}
           width="1920" height="1200" fetchPriority={index === 0 ? 'high' : 'auto'}
           decoding={index === 0 ? 'auto' : 'async'} style={{ objectPosition: heroSlides[index].position || '50% 50%' }}/>
       </picture>)}
@@ -136,7 +143,7 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
     {children}
     <div className="industry-strip" role="group" aria-roledescription="Bildfolge" aria-label="QONSUL Zielbranchen">
       <div className="industry-caption" aria-live={paused || reducedMotion ? 'polite' : 'off'} aria-atomic="true">
-        <span className="industry-kicker">INDUSTRIELLE QUALITÄT / <span>{String(frame.current + 1).padStart(2, '0')} — {heroSlides.length}</span></span>
+        <span className="industry-kicker">INDUSTRIELLE QUALITÄT / <span>{String(current + 1).padStart(2, '0')} — {heroSlides.length}</span></span>
         <strong>{slide.industry}</strong>
         <span className="industry-focus">{slide.focus}</span>
       </div>
@@ -158,9 +165,9 @@ export default function HeroSlideshow({ children }: { children: ReactNode }) {
           <button type="button" aria-label="Nächstes Branchenmotiv" aria-controls="hero-industry-image" onFocus={() => setPaused(true)} onClick={() => choose(requested + 1)}>→</button>
         </div>
       </div>
-      <div className="industry-progress" aria-hidden="true"><i key={frame.current}
-        className={playing && !pending && frame.previous === null ? 'is-running' : ''}/></div>
-      <span className="industry-status" role="status" aria-live={manualRequest.current || error ? 'polite' : 'off'}>{error || (pending ? 'Motiv wird geladen …' : editing ? 'Bildwechsel während der Eingabe pausiert' : '')}</span>
+      <div className="industry-progress" aria-hidden="true"><i key={current}
+        className={playing && !pending && previous === null ? 'is-running' : ''}/></div>
+      <span className="industry-status" role="status" aria-live={manualRequest || error ? 'polite' : 'off'}>{error || (pending ? 'Motiv wird geladen …' : editing ? 'Bildwechsel während der Eingabe pausiert' : '')}</span>
     </div>
   </section>;
 }
