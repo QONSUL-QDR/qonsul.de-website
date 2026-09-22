@@ -37,6 +37,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:integration
+      - run: pnpm lint
       - run: pnpm build
       - name: Ensure validation did not change tracked files
         run: git diff --exit-code
