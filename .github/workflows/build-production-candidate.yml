@@ -148,19 +148,26 @@ jobs:
           PRODUCTION_D1_DATABASE_NAME: ${{ vars.PRODUCTION_D1_DATABASE_NAME }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
         run: node control/scripts/verify-production-environment.mjs
+      - name: Enable the versioned pnpm with Corepack
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          corepack enable
+          EXPECTED_PNPM_VERSION="$(node -p \"require('./package.json').packageManager.replace(/^pnpm@/, '')\")"
+          test "$(corepack pnpm --version)" = "${EXPECTED_PNPM_VERSION}"
       - name: Install candidate dependencies reproducibly
         working-directory: candidate
-        run: pnpm install --frozen-lockfile --ignore-scripts
+        run: corepack pnpm install --frozen-lockfile --ignore-scripts
       - name: Prepare only the isolated local test database
         working-directory: candidate
-        run: env -u CF_D1_DATABASE_ID -u CF_D1_DATABASE_NAME -u PUBLIC_SITE_URL pnpm setup:local
+        run: env -u CF_D1_DATABASE_ID -u CF_D1_DATABASE_NAME -u PUBLIC_SITE_URL corepack pnpm setup:local
       - name: Run candidate typecheck, tests, integration tests, and lint
         working-directory: candidate
         run: |
-          pnpm typecheck
-          pnpm test
-          pnpm test:integration
-          pnpm lint
+          corepack pnpm typecheck
+          corepack pnpm test
+          corepack pnpm test:integration
+          corepack pnpm lint
       - name: Build the validated candidate with its true source identity
         working-directory: candidate
         env:
@@ -171,7 +178,7 @@ jobs:
           CF_D1_DATABASE_ID: ${{ vars.PRODUCTION_D1_DATABASE_ID }}
           CF_D1_DATABASE_NAME: ${{ vars.PRODUCTION_D1_DATABASE_NAME }}
           PUBLIC_SITE_URL: ${{ vars.PUBLIC_SITE_URL }}
-        run: pnpm build
+        run: corepack pnpm build
       - name: Validate the Worker locally without credentials or deployment
         working-directory: candidate
         env:
@@ -179,12 +186,12 @@ jobs:
           WRANGLER_WRITE_LOGS: 'false'
           WRANGLER_LOG_PATH: .wrangler/logs
           PRODUCTION_WORKER_NAME: ${{ vars.PRODUCTION_WORKER_NAME }}
-        run: pnpm exec wrangler deploy --dry-run --config dist/server/wrangler.json --name "${PRODUCTION_WORKER_NAME}" --outdir "${RUNNER_TEMP}/wrangler-dry-run"
+        run: corepack pnpm exec wrangler deploy --dry-run --config dist/server/wrangler.json --name "${PRODUCTION_WORKER_NAME}" --outdir "${RUNNER_TEMP}/wrangler-dry-run"
       - name: Record non-secret build tool versions
         working-directory: candidate
         run: |
-          echo "ARTIFACT_PNPM_VERSION=$(pnpm --version)" >> "$GITHUB_ENV"
-          echo "ARTIFACT_WRANGLER_VERSION=$(pnpm exec wrangler --version)" >> "$GITHUB_ENV"
+          echo "ARTIFACT_PNPM_VERSION=$(corepack pnpm --version)" >> "$GITHUB_ENV"
+          echo "ARTIFACT_WRANGLER_VERSION=$(corepack pnpm exec wrangler --version)" >> "$GITHUB_ENV"
       - name: Revalidate immutable control checkout before sealing
         env:
           EXPECTED_CONTROL_COMMIT: ${{ needs.validate.outputs.control_commit }}
