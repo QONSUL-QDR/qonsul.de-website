@@ -24,26 +24,46 @@ function safePath(value) {
   if (!value || value.includes('..') || value.startsWith('/') || value.includes('\\')) throw new Error(`Unsafe TAR entry: ${value}`);
 }
 
+function gnuLongName(bytes) {
+  const value = Buffer.from(bytes).toString('utf8').replace(/\0.*$/, '');
+  safePath(value);
+  return value;
+}
+
 function parseTar(compressed) {
   const bytes = gunzipSync(compressed);
   const entries = [];
   let offset = 0;
+  let pendingLongName = null;
   while (offset + 512 <= bytes.length) {
     const header = bytes.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
     const name = field(header, 0, 100);
     const prefix = field(header, 345, 155);
-    const path = prefix ? `${prefix}/${name}` : name;
-    safePath(path);
+    const headerPath = prefix ? `${prefix}/${name}` : name;
+    safePath(headerPath);
     const typeFlag = String.fromCharCode(header[156]);
-    const type = typeFlag === '5' ? 'directory' : (typeFlag === '\0' || typeFlag === '0' ? 'file' : 'forbidden');
     const size = octal(header, 124, 12);
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
-    if (dataEnd > bytes.length) throw new Error(`Artifact TAR is truncated at ${path}.`);
-    entries.push({ path, type, bytes: bytes.subarray(dataStart, dataEnd) });
+    if (dataEnd > bytes.length) throw new Error(`Artifact TAR is truncated at ${headerPath}.`);
     offset = dataStart + Math.ceil(size / 512) * 512;
+
+    // GNU tar emits a type-L metadata record named ././@LongLink before a
+    // member whose complete pathname does not fit in its ordinary header.
+    // Recognize it solely by the TAR typeflag, never by its display name.
+    if (typeFlag === 'L') {
+      if (pendingLongName !== null) throw new Error('Artifact TAR has consecutive GNU long-name metadata records.');
+      pendingLongName = gnuLongName(bytes.subarray(dataStart, dataEnd));
+      continue;
+    }
+
+    const path = pendingLongName ?? headerPath;
+    pendingLongName = null;
+    const type = typeFlag === '5' ? 'directory' : (typeFlag === '\0' || typeFlag === '0' ? 'file' : 'forbidden');
+    entries.push({ path, type, bytes: bytes.subarray(dataStart, dataEnd) });
   }
+  if (pendingLongName !== null) throw new Error('Artifact TAR ends after GNU long-name metadata.');
   if (!entries.length) throw new Error('Artifact TAR is empty.');
   return entries;
 }
