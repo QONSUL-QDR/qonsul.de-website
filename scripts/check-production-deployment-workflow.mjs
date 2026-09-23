@@ -4,8 +4,23 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { assertArtifactBindings, assertDeploymentInputs, assertEnvironmentProtection, assertEvidenceUrl, assertSealedManifest, assertSmokeResponse, expectedArtifactName, selectGitHubArtifact } from '../lib/production-deployment.mjs';
 import { buildReleaseManifest, sha256 } from '../lib/production-artifact.mjs';
+
+function tarRecord({ name, typeFlag = '0', bytes = Buffer.alloc(0) }) {
+  assert.ok(Buffer.byteLength(name) <= 100, 'Fixture TAR header name must fit without metadata.');
+  const header = Buffer.alloc(512);
+  Buffer.from(name).copy(header, 0);
+  Buffer.from(`${bytes.length.toString(8).padStart(11, '0')}\0`).copy(header, 124);
+  header[156] = typeFlag.charCodeAt(0);
+  const padding = Buffer.alloc((512 - (bytes.length % 512)) % 512);
+  return Buffer.concat([header, bytes, padding]);
+}
+
+function gzipTar(records) {
+  return gzipSync(Buffer.concat([...records.map(tarRecord), Buffer.alloc(1024)]));
+}
 
 const tag = 'website-production-candidate-2026-09-23';
 const commit = 'a'.repeat(40);
@@ -59,6 +74,47 @@ try {
   await writeFile(manifestPath, JSON.stringify(verifiedManifest));
   const verifier = fileURLToPath(new URL('./verify-sealed-production-artifact.mjs', import.meta.url));
   execFileSync(process.execPath, [verifier, '--archive', archivePath, '--manifest', manifestPath, '--tag', tag, '--tag-object', tagObject, '--commit', commit, '--tree', tree, '--ci-run-id', '42', '--ci-workflow-id', '1', '--ci-workflow-path', '.github/workflows/ci.yml', '--output-dir', path.join(verificationRoot, 'materialized')], { stdio: 'pipe' });
+
+  const longPayloadPath = `dist/${'long-'.repeat(24)}payload.js`;
+  const longPayloadBytes = Buffer.from('export const longNameFixture = true;\n');
+  const gnuLongNameArchive = gzipTar([
+    { name: '././@LongLink', typeFlag: 'L', bytes: Buffer.from(`${longPayloadPath}\0`) },
+    { name: 'long-name-placeholder', bytes: longPayloadBytes },
+    { name: 'dist/server/wrangler.json', bytes: workerBytes },
+    { name: 'release-metadata.json', bytes: metadataBytes },
+  ]);
+  const gnuLongNameFiles = [
+    { path: longPayloadPath, type: 'file', sha256: sha256(longPayloadBytes), size_bytes: longPayloadBytes.length },
+    ...verifiedFiles,
+  ].sort((left, right) => left.path.localeCompare(right.path));
+  const gnuLongNameManifest = buildReleaseManifest({ provenance: { tag, tagObject, commit, tree, ciRunId: '42', ciWorkflowId: 1, ciWorkflowPath: '.github/workflows/ci.yml' }, controlCommit: 'e'.repeat(40), workerName: 'qonsul-de', d1DatabaseId: 'eb2a5897-3116-43f9-88c2-79434ceddc43', d1DatabaseName: 'qonsul-website-d1', archiveFile: 'website-production-candidate.tar.gz', archiveSha256: sha256(gnuLongNameArchive), archiveSize: gnuLongNameArchive.length, artifactFiles: gnuLongNameFiles, tools: { wrangler: '4.127.1' } });
+  const gnuLongNameArchivePath = path.join(verificationRoot, 'gnu-long-name.tar.gz');
+  const gnuLongNameManifestPath = path.join(verificationRoot, 'gnu-long-name-manifest.json');
+  const gnuLongNameOutput = path.join(verificationRoot, 'gnu-long-name-materialized');
+  await writeFile(gnuLongNameArchivePath, gnuLongNameArchive);
+  await writeFile(gnuLongNameManifestPath, JSON.stringify(gnuLongNameManifest));
+  execFileSync(process.execPath, [verifier, '--archive', gnuLongNameArchivePath, '--manifest', gnuLongNameManifestPath, '--tag', tag, '--tag-object', tagObject, '--commit', commit, '--tree', tree, '--ci-run-id', '42', '--ci-workflow-id', '1', '--ci-workflow-path', '.github/workflows/ci.yml', '--output-dir', gnuLongNameOutput], { stdio: 'pipe' });
+  assert.deepEqual(await readFile(path.join(gnuLongNameOutput, longPayloadPath)), longPayloadBytes, 'GNU long-name metadata resolves only the following payload path.');
+
+  const impostorArchive = gzipTar([
+    { name: '././@LongLink', typeFlag: '0', bytes: Buffer.from('not GNU metadata') },
+    { name: 'dist/server/wrangler.json', bytes: workerBytes },
+    { name: 'release-metadata.json', bytes: metadataBytes },
+  ]);
+  const impostorManifest = buildReleaseManifest({ provenance: { tag, tagObject, commit, tree, ciRunId: '42', ciWorkflowId: 1, ciWorkflowPath: '.github/workflows/ci.yml' }, controlCommit: 'e'.repeat(40), workerName: 'qonsul-de', d1DatabaseId: 'eb2a5897-3116-43f9-88c2-79434ceddc43', d1DatabaseName: 'qonsul-website-d1', archiveFile: 'website-production-candidate.tar.gz', archiveSha256: sha256(impostorArchive), archiveSize: impostorArchive.length, artifactFiles: verifiedFiles, tools: { wrangler: '4.127.1' } });
+  const impostorArchivePath = path.join(verificationRoot, 'impostor-long-link.tar.gz');
+  const impostorManifestPath = path.join(verificationRoot, 'impostor-long-link-manifest.json');
+  await writeFile(impostorArchivePath, impostorArchive);
+  await writeFile(impostorManifestPath, JSON.stringify(impostorManifest));
+  let impostorError;
+  try {
+    execFileSync(process.execPath, [verifier, '--archive', impostorArchivePath, '--manifest', impostorManifestPath, '--tag', tag, '--tag-object', tagObject, '--commit', commit, '--tree', tree, '--ci-run-id', '42', '--ci-workflow-id', '1', '--ci-workflow-path', '.github/workflows/ci.yml'], { stdio: 'pipe' });
+  } catch (error) {
+    impostorError = error;
+  }
+  assert.ok(impostorError, 'A regular payload named ././@LongLink must be rejected.');
+  assert.match(String(impostorError.stderr), /Entry is outside the artifact allowlist: \.\/\.\/@LongLink/);
+
   await writeFile(manifestPath, JSON.stringify({ ...verifiedManifest, artifact: { ...verifiedManifest.artifact, sha256: '0'.repeat(64) } }));
   assert.throws(() => execFileSync(process.execPath, [verifier, '--archive', archivePath, '--manifest', manifestPath, '--tag', tag, '--tag-object', tagObject, '--commit', commit, '--tree', tree, '--ci-run-id', '42', '--ci-workflow-id', '1', '--ci-workflow-path', '.github/workflows/ci.yml'], { stdio: 'pipe' }));
 } finally { await rm(verificationRoot, { recursive: true, force: true }); }
