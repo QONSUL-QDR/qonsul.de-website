@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { assertArtifactBindings, assertDeploymentInputs, assertEnvironmentProtection, assertEvidenceUrl, assertSealedManifest, assertSmokeResponse, expectedArtifactName, selectGitHubArtifact } from '../lib/production-deployment.mjs';
 import { buildReleaseManifest, sha256 } from '../lib/production-artifact.mjs';
+import { PRODUCTION_PUBLIC_RUNTIME_V1 } from '../lib/production-public-runtime.mjs';
 
 function tarRecord({ name, typeFlag = '0', bytes = Buffer.alloc(0) }) {
   assert.ok(Buffer.byteLength(name) <= 100, 'Fixture TAR header name must fit without metadata.');
@@ -51,8 +52,11 @@ assert.throws(() => assertSealedManifest({ ...manifest, tree: 'f'.repeat(40) }, 
 
 const fingerprints = { worker_name_sha256: sha256('qonsul-de'), d1_database_id_sha256: sha256('eb2a5897-3116-43f9-88c2-79434ceddc43'), d1_database_name_sha256: sha256('qonsul-website-d1') };
 const metadata = { public_site_url: 'https://qonsul.de', binding_fingerprints: fingerprints };
-const workerConfig = { name: 'qonsul-de', topLevelName: 'qonsul-de', d1_databases: [{ binding: 'DB', database_id: 'eb2a5897-3116-43f9-88c2-79434ceddc43', database_name: 'qonsul-website-d1' }], migrations: [] };
+const workerConfig = { name: 'qonsul-de', topLevelName: 'qonsul-de', vars: { ...PRODUCTION_PUBLIC_RUNTIME_V1 }, d1_databases: [{ binding: 'DB', database_id: 'eb2a5897-3116-43f9-88c2-79434ceddc43', database_name: 'qonsul-website-d1' }], migrations: [] };
 assertArtifactBindings({ metadata, manifest: { ...manifest, binding_fingerprints: fingerprints }, workerConfig });
+for (const vars of [undefined, {}, { ...workerConfig.vars, LEGAL_VAT_ID: 'wrong' }, { ...workerConfig.vars, EXTRA: 'unexpected' }]) {
+  assert.throws(() => assertArtifactBindings({ metadata, manifest, workerConfig: { ...workerConfig, vars } }), /Artifact Worker var/);
+}
 assert.throws(() => assertArtifactBindings({ metadata, manifest: { ...manifest, binding_fingerprints: fingerprints }, workerConfig: { ...workerConfig, name: 'other' } }));
 assert.throws(() => assertArtifactBindings({ metadata, manifest: { ...manifest, binding_fingerprints: fingerprints }, workerConfig: { ...workerConfig, routes: ['example.com/*'] } }));
 
@@ -73,7 +77,32 @@ try {
   const manifestPath = path.join(verificationRoot, 'release-manifest.json');
   await writeFile(manifestPath, JSON.stringify(verifiedManifest));
   const verifier = fileURLToPath(new URL('./verify-sealed-production-artifact.mjs', import.meta.url));
-  execFileSync(process.execPath, [verifier, '--archive', archivePath, '--manifest', manifestPath, '--tag', tag, '--tag-object', tagObject, '--commit', commit, '--tree', tree, '--ci-run-id', '42', '--ci-workflow-id', '1', '--ci-workflow-path', '.github/workflows/ci.yml', '--output-dir', path.join(verificationRoot, 'materialized')], { stdio: 'pipe' });
+  const verifyArgs = (archive, releaseManifest) => [verifier, '--archive', archive, '--manifest', releaseManifest, '--tag', tag, '--tag-object', tagObject, '--commit', commit, '--tree', tree, '--ci-run-id', '42', '--ci-workflow-id', '1', '--ci-workflow-path', '.github/workflows/ci.yml'];
+  execFileSync(process.execPath, [...verifyArgs(archivePath, manifestPath), '--output-dir', path.join(verificationRoot, 'materialized')], { stdio: 'pipe' });
+
+  for (const [label, vars] of [
+    ['missing', { ...workerConfig.vars, LEGAL_PHONE: undefined }],
+    ['extra', { ...workerConfig.vars, UNAPPROVED: 'value' }],
+    ['different', { ...workerConfig.vars, LEGAL_PHONE: '+49 000' }],
+  ]) {
+    const changedWorkerBytes = Buffer.from(JSON.stringify({ ...workerConfig, vars }));
+    const changedArchive = gzipTar([
+      { name: 'dist/server/wrangler.json', bytes: changedWorkerBytes },
+      { name: 'release-metadata.json', bytes: metadataBytes },
+    ]);
+    const changedArchivePath = path.join(verificationRoot, `${label}-vars.tar.gz`);
+    const changedManifestPath = path.join(verificationRoot, `${label}-vars-manifest.json`);
+    const changedFiles = verifiedFiles.map((file) => file.path === 'dist/server/wrangler.json'
+      ? { ...file, sha256: sha256(changedWorkerBytes), size_bytes: changedWorkerBytes.length }
+      : file);
+    await writeFile(changedArchivePath, changedArchive);
+    await writeFile(changedManifestPath, JSON.stringify({ ...verifiedManifest, artifact: { ...verifiedManifest.artifact, sha256: sha256(changedArchive), size_bytes: changedArchive.length, files: changedFiles } }));
+    let error;
+    try { execFileSync(process.execPath, verifyArgs(changedArchivePath, changedManifestPath), { stdio: 'pipe' }); }
+    catch (caught) { error = caught; }
+    assert.ok(error, `Artifact verification must reject ${label} public runtime vars.`);
+    assert.match(String(error.stderr), /Artifact Worker var/);
+  }
 
   const longPayloadPath = `dist/${'long-'.repeat(24)}payload.js`;
   const longPayloadBytes = Buffer.from('export const longNameFixture = true;\n');

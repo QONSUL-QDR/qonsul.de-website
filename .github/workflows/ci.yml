@@ -39,5 +39,16 @@ jobs:
       - run: pnpm test:integration
       - run: pnpm lint
       - run: pnpm build
+      - run: node scripts/check-preview-worker-build.mjs
+      - name: Build and inspect the Production legal runtime locally
+        env:
+          PRODUCTION_ARTIFACT_BUILD: 'true'
+          PRODUCTION_ANALYTICS_ENDPOINT: https://cockpit.qonsul.de/api/v1/analytics/events
+          CF_D1_DATABASE_ID: eb2a5897-3116-43f9-88c2-79434ceddc43
+          CF_D1_DATABASE_NAME: qonsul-website-d1
+          PUBLIC_SITE_URL: https://qonsul.de
+        run: |
+          pnpm build
+          pnpm test:production-legal
       - name: Ensure validation did not change tracked files
         run: git diff --exit-code

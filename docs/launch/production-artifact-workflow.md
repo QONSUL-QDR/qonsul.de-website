@@ -37,6 +37,8 @@ The workflow fail-closes on every binding deviation. The approved Production Wor
 
 The existing Sites plugin uses a preview-hosting project configuration without a verifiable analytics endpoint. For `PRODUCTION_ARTIFACT_BUILD=true` it is therefore disabled. The build accepts only `https://cockpit.qonsul.de/api/v1/analytics/events` as its explicit analytics endpoint configuration; a staging, preview, Workers, blank, or any other endpoint aborts the build before plugin setup. The artifact build does not send analytics events.
 
+The ten approved public legal/contact/readiness values are versioned in `lib/production-public-runtime.mjs`. Only `PRODUCTION_ARTIFACT_BUILD=true` includes them as Worker `vars` in the generated `dist/server/wrangler.json`. Seal and deployment verification reject missing, extra, or changed `vars`. These public values do not come from a Cloudflare dashboard, `wrangler secret put`, GitHub Environment variables, or `.env`; actual secrets remain outside Git.
+
 ## Artifact and verification
 
 Only `dist/` and `release-metadata.json` enter `website-production-candidate.tar.gz`. Symlinks, non-regular files, traversal paths, and absolute paths are rejected before archiving. The sibling `release-manifest.json` records the archive SHA-256, protected tag object, commit, tree, CI workflow provenance, control commit, build ID, tool versions, SHA-256 fingerprints of non-secret bindings, and a SHA-256 plus byte size for every archived file.

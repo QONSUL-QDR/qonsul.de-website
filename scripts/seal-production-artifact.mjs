@@ -9,6 +9,7 @@ import {
   buildIdFor,
   sha256,
 } from '../lib/production-artifact.mjs';
+import { assertProductionPublicRuntimeVars } from '../lib/production-public-runtime.mjs';
 
 function readArgument(name) {
   const index = process.argv.indexOf(name);
@@ -38,6 +39,7 @@ buildIdFor(provenance.commit, provenance.tree);
 
 const workerConfigPath = path.join(candidateDir, 'dist', 'server', 'wrangler.json');
 const workerConfig = JSON.parse(await readFile(workerConfigPath, 'utf8'));
+assertProductionPublicRuntimeVars(workerConfig.vars);
 const database = workerConfig.d1_databases?.find((binding) => binding.binding === 'DB');
 if (!database || database.database_id !== d1DatabaseId || database.database_name !== d1DatabaseName) {
   throw new Error('Built Worker configuration does not match the approved Production D1 binding.');

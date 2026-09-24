@@ -36,7 +36,7 @@ CLOUDFLARE_ACCOUNT_ID="<Account-ID>" npx wrangler deploy --dry-run   # erst prü
 CLOUDFLARE_ACCOUNT_ID="<Account-ID>" npx wrangler deploy
 ```
 
-Secrets (`OPENAI_API_KEY`, `HUBSPOT_ACCESS_TOKEN`, `RESEND_API_KEY`, `MAINTENANCE_SECRET`, `RATE_LIMIT_SALT`, `LEGAL_*` usw.) separat je Umgebung über `wrangler secret put <NAME>` bzw. das Cloudflare-Dashboard setzen, nicht im Repository. Migrationen (`drizzle/0000_*.sql`, `drizzle/0001_*.sql`) auf die neue Datenbank anwenden, bevor der Worker sie anspricht. Dieser Pfad betrifft ausschließlich einen zusätzlichen, eigenständigen Cloudflare-Account/Worker — die bestehende Sites-Vorschau und `.openai/hosting.json` bleiben davon unberührt.
+Echte Secrets (`OPENAI_API_KEY`, `HUBSPOT_ACCESS_TOKEN`, `RESEND_API_KEY`, `MAINTENANCE_SECRET`, `RATE_LIMIT_SALT` usw.) separat je Umgebung über einen Secret Store verwalten, nicht im Repository. Die freigegebenen `LEGAL_*`-Werte, `PUBLIC_CONTACT_EMAIL` und `PRODUCTION_READY` sind dagegen öffentliche, versionierte Worker-`vars` ausschließlich für den versiegelten Production-Candidate; siehe `docs/CONFIGURATION.md`. Sie werden weder als Secrets noch über Cloudflare-Dashboard, GitHub-Environment-Variablen oder `.env` in diesen Candidate eingebracht. Migrationen (`drizzle/0000_*.sql`, `drizzle/0001_*.sql`) auf die neue Datenbank anwenden, bevor der Worker sie anspricht. Dieser Pfad betrifft ausschließlich einen zusätzlichen, eigenständigen Cloudflare-Account/Worker — die bestehende Sites-Vorschau und `.openai/hosting.json` bleiben davon unberührt.
 
 ## qonsul.de / IONOS
 

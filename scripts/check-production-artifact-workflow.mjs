@@ -18,6 +18,7 @@ import {
   parseAnnotatedTag,
   selectReleaseTagRuleset,
 } from '../lib/production-artifact.mjs';
+import { PRODUCTION_PUBLIC_RUNTIME_V1, assertProductionPublicRuntimeVars } from '../lib/production-public-runtime.mjs';
 
 const commit = 'cef82619f109424df2f18028272b6619fad121fc';
 const tree = '9a8c2488b7da5f4e447ce930973b076671576e36';
@@ -69,6 +70,14 @@ assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], path: '..
 assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], path: '/outside' }, artifactFiles[1]]));
 assertProductionAnalyticsEndpoint('https://cockpit.qonsul.de/api/v1/analytics/events');
 assert.throws(() => assertProductionAnalyticsEndpoint('https://staging.qonsul.de/api/v1/analytics/events'));
+assert.equal(Object.keys(PRODUCTION_PUBLIC_RUNTIME_V1).length, 10);
+assertProductionPublicRuntimeVars({ ...PRODUCTION_PUBLIC_RUNTIME_V1 });
+assert.throws(() => assertProductionPublicRuntimeVars(undefined), /vars are missing/);
+assert.throws(() => assertProductionPublicRuntimeVars({ ...PRODUCTION_PUBLIC_RUNTIME_V1, LEGAL_PHONE: undefined }), /LEGAL_PHONE/);
+assert.throws(() => assertProductionPublicRuntimeVars({ ...PRODUCTION_PUBLIC_RUNTIME_V1, LEGAL_PHONE: '+49 000' }), /LEGAL_PHONE/);
+assert.throws(() => assertProductionPublicRuntimeVars({ ...PRODUCTION_PUBLIC_RUNTIME_V1, UNAPPROVED: 'value' }), /exactly the approved/);
+const missingPhone = Object.fromEntries(Object.entries(PRODUCTION_PUBLIC_RUNTIME_V1).filter(([key]) => key !== 'LEGAL_PHONE'));
+assert.throws(() => assertProductionPublicRuntimeVars(missingPhone), /exactly the approved/);
 
 const manifest = buildReleaseManifest({
   provenance: { tag, tagObject: 'a'.repeat(40), commit, tree, ciRunId, ciWorkflowId: 42, ciWorkflowPath: '.github/workflows/ci.yml' },
@@ -92,8 +101,26 @@ try {
   const candidateDir = path.join(artifactTestRoot, 'candidate');
   const serverDir = path.join(candidateDir, 'dist', 'server');
   await mkdir(serverDir, { recursive: true });
-  await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify({ d1_databases: [{ binding: 'DB', database_id: 'eb2a5897-3116-43f9-88c2-79434ceddc43', database_name: 'qonsul-website-d1' }] }));
+  const workerConfig = { vars: { ...PRODUCTION_PUBLIC_RUNTIME_V1 }, d1_databases: [{ binding: 'DB', database_id: 'eb2a5897-3116-43f9-88c2-79434ceddc43', database_name: 'qonsul-website-d1' }] };
+  await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify(workerConfig));
   await writeFile(path.join(serverDir, 'index.js'), 'export default {};\n');
+  const sealArgs = (outputDir) => [fileURLToPath(new URL('./seal-production-artifact.mjs', import.meta.url)), '--candidate-dir', candidateDir, '--output-dir', outputDir, '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)];
+  const sealEnv = { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-de', PRODUCTION_D1_DATABASE_ID: 'eb2a5897-3116-43f9-88c2-79434ceddc43', PRODUCTION_D1_DATABASE_NAME: 'qonsul-website-d1', PUBLIC_SITE_URL: 'https://qonsul.de' };
+  for (const [label, vars] of [
+    ['missing', missingPhone],
+    ['extra', { ...PRODUCTION_PUBLIC_RUNTIME_V1, UNAPPROVED: 'value' }],
+    ['different', { ...PRODUCTION_PUBLIC_RUNTIME_V1, LEGAL_PHONE: '+49 000' }],
+  ]) {
+    await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify({ ...workerConfig, vars }));
+    let error;
+    try { execFileSync(process.execPath, sealArgs(path.join(artifactTestRoot, `output-${label}`)), { env: sealEnv, stdio: 'pipe' }); }
+    catch (caught) { error = caught; }
+    assert.ok(error, `Artifact sealing must reject ${label} public runtime vars.`);
+    assert.match(String(error.stderr), /Artifact Worker var/);
+  }
+  await writeFile(path.join(serverDir, 'wrangler.json'), JSON.stringify(workerConfig));
+  execFileSync(process.execPath, sealArgs(path.join(artifactTestRoot, 'valid-output')), { env: sealEnv, stdio: 'pipe' });
+  assert.ok((await readFile(path.join(artifactTestRoot, 'valid-output', 'release-manifest.json'), 'utf8')).includes('release-metadata.json'));
   try {
     await symlink('index.js', path.join(serverDir, 'forbidden-link.js'), 'file');
   } catch (error) {
@@ -102,7 +129,7 @@ try {
   }
   let symlinkError;
   try {
-    execFileSync(process.execPath, [fileURLToPath(new URL('./seal-production-artifact.mjs', import.meta.url)), '--candidate-dir', candidateDir, '--output-dir', path.join(artifactTestRoot, 'output'), '--tag', tag, '--tag-object', 'a'.repeat(40), '--commit', commit, '--tree', tree, '--ci-run-id', ciRunId, '--ci-workflow-id', '42', '--ci-workflow-path', '.github/workflows/ci.yml', '--control-commit', 'b'.repeat(40)], { env: { ...process.env, PRODUCTION_WORKER_NAME: 'qonsul-de', PRODUCTION_D1_DATABASE_ID: 'eb2a5897-3116-43f9-88c2-79434ceddc43', PRODUCTION_D1_DATABASE_NAME: 'qonsul-website-d1', PUBLIC_SITE_URL: 'https://qonsul.de' }, stdio: 'pipe' });
+    execFileSync(process.execPath, sealArgs(path.join(artifactTestRoot, 'output')), { env: sealEnv, stdio: 'pipe' });
   } catch (error) {
     symlinkError = error;
   }

@@ -4,6 +4,7 @@ import vinext from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json';
 import { assertProductionAnalyticsEndpoint } from './lib/production-artifact.mjs';
+import { PRODUCTION_PUBLIC_RUNTIME_V1 } from './lib/production-public-runtime.mjs';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
@@ -57,6 +58,10 @@ const localBindingConfig = {
     : [],
 };
 
+const workerBindingConfig = isProductionArtifactBuild
+  ? { ...localBindingConfig, vars: PRODUCTION_PUBLIC_RUNTIME_V1 }
+  : localBindingConfig;
+
 export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
@@ -81,7 +86,7 @@ export default defineConfig(async () => {
       ...(isProductionArtifactBuild ? [] : [sites()]),
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
-        config: localBindingConfig,
+        config: workerBindingConfig,
       }),
     ],
   };
