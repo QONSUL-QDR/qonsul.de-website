@@ -10,6 +10,7 @@ import { writeProductionLegalPreview } from '../lib/production-legal-preview.mjs
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const args = process.argv.slice(2);
+if (args[0] === '--') args.shift();
 function requiredOption(name) {
   const index = args.indexOf(name);
   if (index === -1 || !args[index + 1]) throw new Error(`Missing required ${name} option.`);
