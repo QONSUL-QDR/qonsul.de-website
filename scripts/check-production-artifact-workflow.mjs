@@ -171,6 +171,15 @@ for (const command of ['install --frozen-lockfile --ignore-scripts', 'setup:loca
 assert.match(workflow, /deploy --dry-run/);
 assert.doesNotMatch(workflow, /wrangler\s+deploy(?!\s+--dry-run)/);
 assert.match(ciWorkflowFile, /- run: pnpm test:integration\r?\n\s+- run: pnpm lint\r?\n\s+- run: pnpm build/);
+assert.match(ciWorkflowFile, /ref:\s*\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+assert.match(ciWorkflowFile, /PRODUCTION_LEGAL_PREVIEW_DIR:\s*\$\{\{ runner\.temp \}\}\/production-legal-preview/);
+assert.match(ciWorkflowFile, /pnpm test:production-legal -- --output-dir "\$PRODUCTION_LEGAL_PREVIEW_DIR" --head-commit "\$PRODUCTION_LEGAL_PREVIEW_HEAD_COMMIT" --head-tree "\$PRODUCTION_LEGAL_PREVIEW_HEAD_TREE"/);
+assert.match(ciWorkflowFile, /check-production-legal-preview\.mjs --verify-output "\$PRODUCTION_LEGAL_PREVIEW_DIR"/);
+assert.match(ciWorkflowFile, /actions\/upload-artifact@[0-9a-f]{40}/);
+assert.match(ciWorkflowFile, /name:\s*production-legal-preview-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+assert.match(ciWorkflowFile, /retention-days:\s*14/);
+assert.match(ciWorkflowFile, /if-no-files-found:\s*error/);
+for (const file of ['impressum.html', 'datenschutz.html', 'manifest.json']) assert.match(ciWorkflowFile, new RegExp(`runner\\.temp \\}\\}\\/production-legal-preview\\/${file.replace('.', '\\.')}`));
 assert.match(viteConfig, /assertProductionAnalyticsEndpoint/);
 assert.match(viteConfig, /isProductionArtifactBuild \? \[\] : \[sites\(\)\]/);
 assert.match(viteConfig, /__QONSUL_SOURCE_COMMIT_SHA__/);

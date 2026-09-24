@@ -6,8 +6,20 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { PRODUCTION_PUBLIC_RUNTIME_V1, assertProductionPublicRuntimeVars } from '../lib/production-public-runtime.mjs';
+import { writeProductionLegalPreview } from '../lib/production-legal-preview.mjs';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const args = process.argv.slice(2);
+function requiredOption(name) {
+  const index = args.indexOf(name);
+  if (index === -1 || !args[index + 1]) throw new Error(`Missing required ${name} option.`);
+  return args[index + 1];
+}
+if (args.length !== 6) throw new Error('Usage: pnpm test:production-legal -- --output-dir <absolute-dir> --head-commit <sha> --head-tree <tree>');
+const outputDir = requiredOption('--output-dir');
+const headCommit = requiredOption('--head-commit');
+const headTree = requiredOption('--head-tree');
+if (!path.isAbsolute(outputDir)) throw new Error('The legal-preview output directory must be absolute.');
 const config = JSON.parse(await readFile(path.join(root, 'dist/server/wrangler.json'), 'utf8'));
 assertProductionPublicRuntimeVars(config.vars);
 assert.equal(Object.keys(config.vars).length, 10);
@@ -49,17 +61,20 @@ try {
   assert.equal(status.productionReady, true);
   assert.equal(status.contactEmail, PRODUCTION_PUBLIC_RUNTIME_V1.PUBLIC_CONTACT_EMAIL);
 
-  for (const [route, expectedKeys] of [
-    ['/impressum', ['LEGAL_ENTITY_NAME', 'LEGAL_ADDRESS', 'LEGAL_REPRESENTATIVE', 'LEGAL_PHONE', 'LEGAL_REGISTER', 'LEGAL_VAT_ID', 'LEGAL_EDITORIAL_RESPONSIBLE', 'LEGAL_DISPUTE_RESOLUTION', 'PUBLIC_CONTACT_EMAIL']],
-    ['/datenschutz', ['LEGAL_ENTITY_NAME', 'LEGAL_ADDRESS', 'PUBLIC_CONTACT_EMAIL']],
+  const renderedPages = {};
+  for (const [route, file, expectedKeys] of [
+    ['/impressum', 'impressum.html', ['LEGAL_ENTITY_NAME', 'LEGAL_ADDRESS', 'LEGAL_REPRESENTATIVE', 'LEGAL_PHONE', 'LEGAL_REGISTER', 'LEGAL_VAT_ID', 'LEGAL_EDITORIAL_RESPONSIBLE', 'LEGAL_DISPUTE_RESOLUTION', 'PUBLIC_CONTACT_EMAIL']],
+    ['/datenschutz', 'datenschutz.html', ['LEGAL_ENTITY_NAME', 'LEGAL_ADDRESS', 'PUBLIC_CONTACT_EMAIL']],
   ]) {
     const response = await fetch(`${base}${route}`);
     assert.equal(response.status, 200, `${route} must render successfully`);
     const html = await response.text();
     for (const key of expectedKeys) assert.ok(html.includes(PRODUCTION_PUBLIC_RUNTIME_V1[key]), `${route} must render ${key}`);
     assert.doesNotMatch(html, /class="preview-note"|Entwurf vor dem öffentlichen Launch|noch zu ergänzen|vor Freigabe zu hinterlegen|vor Veröffentlichung zu bestätigen|noch zu bestätigen|abhängig von Mitarbeiterzahl/, `${route} must not render draft text or placeholders`);
+    renderedPages[file] = html;
   }
-  console.log('PASS built Production Worker has exactly ten approved vars and renders both legal pages without draft text or placeholders');
+  const manifest = await writeProductionLegalPreview({ outputDir, headCommit, headTree, renderedPages });
+  console.log(`PASS built Production Worker has exactly ten approved vars, renders both legal pages without draft text or placeholders, and writes verified legal preview evidence for ${manifest.head_commit}`);
 } finally {
   try {
     if (server.pid && server.exitCode === null) {

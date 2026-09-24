@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           run_install: false
@@ -47,8 +48,25 @@ jobs:
           CF_D1_DATABASE_ID: eb2a5897-3116-43f9-88c2-79434ceddc43
           CF_D1_DATABASE_NAME: qonsul-website-d1
           PUBLIC_SITE_URL: https://qonsul.de
+          PRODUCTION_LEGAL_PREVIEW_DIR: ${{ runner.temp }}/production-legal-preview
+          PRODUCTION_LEGAL_PREVIEW_HEAD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pnpm build
-          pnpm test:production-legal
+          PRODUCTION_LEGAL_PREVIEW_HEAD_TREE="$(git rev-parse "${PRODUCTION_LEGAL_PREVIEW_HEAD_COMMIT}^{tree}")"
+          pnpm test:production-legal -- --output-dir "$PRODUCTION_LEGAL_PREVIEW_DIR" --head-commit "$PRODUCTION_LEGAL_PREVIEW_HEAD_COMMIT" --head-tree "$PRODUCTION_LEGAL_PREVIEW_HEAD_TREE"
+      - name: Verify Production legal preview evidence before upload
+        env:
+          PRODUCTION_LEGAL_PREVIEW_DIR: ${{ runner.temp }}/production-legal-preview
+        run: node scripts/check-production-legal-preview.mjs --verify-output "$PRODUCTION_LEGAL_PREVIEW_DIR"
+      - name: Upload Production legal preview
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: production-legal-preview-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/production-legal-preview/impressum.html
+            ${{ runner.temp }}/production-legal-preview/datenschutz.html
+            ${{ runner.temp }}/production-legal-preview/manifest.json
       - name: Ensure validation did not change tracked files
         run: git diff --exit-code
