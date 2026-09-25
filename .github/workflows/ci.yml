@@ -41,6 +41,8 @@ jobs:
       - run: pnpm lint
       - run: pnpm build
       - run: node scripts/check-preview-worker-build.mjs
+      - run: pnpm test:staging-worker
+      - run: pnpm check:staging-deploy-boundary
       - name: Build and inspect the Production legal runtime locally
         env:
           PRODUCTION_ARTIFACT_BUILD: 'true'
