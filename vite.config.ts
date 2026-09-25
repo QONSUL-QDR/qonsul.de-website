@@ -5,20 +5,32 @@ import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json';
 import { assertProductionAnalyticsEndpoint } from './lib/production-artifact.mjs';
 import { PRODUCTION_PUBLIC_RUNTIME_V1 } from './lib/production-public-runtime.mjs';
+import { STAGING_ANALYTICS_ENDPOINT, STAGING_PUBLIC_RUNTIME_V1 } from './lib/staging-runtime.mjs';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
 
 const { d1, r2 } = hostingConfig;
 const isProductionArtifactBuild = process.env.PRODUCTION_ARTIFACT_BUILD === 'true';
+const isStagingWorkerBuild = process.env.STAGING_WORKER_BUILD === 'true';
 const sourceCommit = process.env.SOURCE_COMMIT_SHA || '';
+const sourceTree = process.env.SOURCE_TREE_SHA || '';
 const sourceBuildId = process.env.SOURCE_BUILD_ID || '';
+const sourceDeployId = process.env.SOURCE_DEPLOY_ID || '';
+const deploymentEnvironment = process.env.DEPLOYMENT_ENVIRONMENT || '';
+const analyticsEndpoint = process.env.NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT || process.env.PRODUCTION_ANALYTICS_ENDPOINT || '';
 
 // The existing Sites project is a preview-hosting control plane. Artifact builds
 // must not infer a telemetry destination from it: without a verifiable endpoint
 // contract, the Sites plugin is deliberately excluded.
 if (isProductionArtifactBuild) {
   assertProductionAnalyticsEndpoint(process.env.PRODUCTION_ANALYTICS_ENDPOINT);
+}
+if (isProductionArtifactBuild && isStagingWorkerBuild) {
+  throw new Error('A build cannot be both a production artifact and a staging Worker.');
+}
+if (isStagingWorkerBuild && analyticsEndpoint !== STAGING_ANALYTICS_ENDPOINT) {
+  throw new Error('Staging Worker analytics must use Cockpit staging.');
 }
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
@@ -60,7 +72,9 @@ const localBindingConfig = {
 
 const workerBindingConfig = isProductionArtifactBuild
   ? { ...localBindingConfig, vars: PRODUCTION_PUBLIC_RUNTIME_V1 }
-  : localBindingConfig;
+  : isStagingWorkerBuild
+    ? { ...localBindingConfig, vars: STAGING_PUBLIC_RUNTIME_V1 }
+    : localBindingConfig;
 
 export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
@@ -75,7 +89,11 @@ export default defineConfig(async () => {
   return {
     define: {
       __QONSUL_SOURCE_COMMIT_SHA__: JSON.stringify(sourceCommit),
+      __QONSUL_SOURCE_TREE_SHA__: JSON.stringify(sourceTree),
       __QONSUL_SOURCE_BUILD_ID__: JSON.stringify(sourceBuildId),
+      __QONSUL_SOURCE_DEPLOY_ID__: JSON.stringify(sourceDeployId),
+      __QONSUL_DEPLOYMENT_ENVIRONMENT__: JSON.stringify(deploymentEnvironment),
+      'process.env.NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT': JSON.stringify(analyticsEndpoint),
     },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
