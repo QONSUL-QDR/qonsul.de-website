@@ -1,6 +1,5 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 import {
   STAGING_ANALYTICS_ENDPOINT,
   STAGING_SOURCE,
@@ -23,8 +22,9 @@ if (!/^staging-[a-zA-Z0-9-]{8,128}$/.test(deployId)) {
   throw new Error('STAGING_DEPLOY_ID must be a non-secret staging identifier.');
 }
 
-const result = spawnSync(process.execPath, [fileURLToPath(new URL('../node_modules/pnpm/bin/pnpm.cjs', import.meta.url)), 'build'], {
+const result = spawnSync('pnpm', ['build'], {
   stdio: 'inherit',
+  shell: process.platform === 'win32',
   env: {
     ...process.env,
     CF_D1_DATABASE_ID: d1DatabaseId,
