@@ -6,8 +6,17 @@ import {signature} from '../lib/cockpit-intake-client.ts';
 import {requestPublicAIHypotheses,requestPublicAIHypothesesStatus,PublicAIIntakeError} from '../lib/public-ai-intake-client.ts';
 import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
 import {suggestBlindSpots} from '../lib/analysis.ts';
+import {isCockpitIntakeConfigured} from '../lib/cockpit-intake-config.ts';
+import {diagnosticFailure} from '../lib/diagnostic-response.ts';
+import {LocalDatabaseUnavailableError} from '../lib/runtime-errors.ts';
 
 const id='11111111-1111-4111-8111-111111111111';
+assert.equal(isCockpitIntakeConfigured({baseUrl:'',secret:''}),false);
+assert.equal(isCockpitIntakeConfigured({baseUrl:'https://cockpit.example',secret:'short'}),false);
+assert.equal(isCockpitIntakeConfigured({baseUrl:'http://cockpit.example',secret:'x'.repeat(32)}),false);
+assert.equal(isCockpitIntakeConfigured({baseUrl:'http://127.0.0.1:8787',secret:'x'.repeat(32)}),true);
+assert.equal(isCockpitIntakeConfigured({baseUrl:'https://cockpit.example',secret:'x'.repeat(32)}),true);
+assert.deepEqual(diagnosticFailure(new LocalDatabaseUnavailableError()),{status:503,body:{error:'Die lokale Diagnostic-Datenbank ist nicht verfügbar.',code:'local_database_unavailable'}});
 const analysis={problem:'Synthetisches Qualitätsproblem für den getrennten Diagnostic-Contract.',mode:'rules',availableData:['Prüf- & Messdaten'],causes:[
   {id:'cause-1',category:'Prozess',text:'Eigene synthetische Beobachtung',source:'user'},
   {id:'cause-2',category:'Prozess',text:'Systemische Prüfhypothese',source:'rules',check:'Mit synthetischen Daten prüfen.',data:['Prüf- & Messdaten']},
@@ -50,8 +59,10 @@ assert.equal(diagnosticRedirectRequests,1,'a 3xx Diagnostic response is not foll
 
 await assert.rejects(
   () => deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({errors:{idempotency_key:['conflict']}},{status:422})}),
-  error => error instanceof DiagnosticDeliveryError && error.httpStatus === 422 && error.retryWithNewSubmissionId === true,
+  error => error instanceof DiagnosticDeliveryError && error.kind === 'rejected' && error.httpStatus === 422 && error.retryWithNewSubmissionId === true,
 );
+const rejectedFailure=diagnosticFailure(new DiagnosticDeliveryError('rejected',false,422,false,'rejected'));
+assert.equal(rejectedFailure.status,422);assert.equal(rejectedFailure.body.code,'diagnostic_intake_rejected');
 
 let nextSubmission = 0;
 const createSubmissionId = () => `11111111-1111-4111-8111-${String(++nextSubmission).padStart(12,'0')}`;
@@ -84,7 +95,10 @@ const correction=await correctDiagnosticConsultationEmail({source_event_id:id,co
 }});
 assert.deepEqual(correction,{correctionToken});
 assert.equal(correctionSeen,true);
-await assert.rejects(()=>deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret:'short',fetchImpl}),DiagnosticDeliveryError);
+await assert.rejects(()=>deliverDiagnostic(event,{baseUrl:'https://cockpit.example',secret:'short',fetchImpl}),error=>{
+  assert.ok(error instanceof DiagnosticDeliveryError);assert.equal(error.kind,'configuration');
+  assert.equal(diagnosticFailure(error).body.code,'diagnostic_intake_not_configured');return true;
+});
 const publicAiEvent={source_event_id:'33333333-3333-4333-8333-333333333333',analysis_round:1,problem:'Synthetisches Qualitätsproblem für die KI-Unterstützung.',causes:[{category:'Prozess',text:'Synthetische Beobachtung'}]};
 let publicAiSeen=false;
 const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
@@ -108,6 +122,8 @@ const publicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent.source_
 }});
 assert.equal(publicAiStatus.status,'completed');
 assert.equal(publicAiStatusSeen,true);
+const publicAiProcessing=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'processing'})});
+assert.deepEqual(publicAiProcessing,{status:'processing'});
 await assert.rejects(()=>requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret:'short'}),PublicAIIntakeError);
 await assert.rejects(
   () => requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'60'}})}),
@@ -175,7 +191,8 @@ assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { me
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\);\s+try \{\s+const response = await fetch\('\/api\/diagnostic-ai-hypotheses'/,'status polling begins before the initial generation response can time out');
 assert.match(diagnosticUi,/\} catch \{ \/\* Status polling resolves controlled provider failures and timeouts\. \*\/ \}/,'an initial generation timeout does not stop active status polling or mark a final UI error');
 assert.match(diagnosticUi,/response\.ok && result\.status === 'completed' && result\.causes\) return applyAIHypotheses/,'a later completed status result is applied after an initial generation timeout');
-assert.match(diagnosticUi,/response\.ok && result\.status === 'failed'\) return failAIAnalysis\(\);/,'a failed status result remains a controlled technical error');
+assert.match(diagnosticUi,/response\.ok && result\.status === 'processing'\) \{\s+aiPollingTimer\.current = setTimeout\(poll, 2_500\);\s+return;\s+\}/,'only an explicit processing status schedules another poll');
+assert.match(diagnosticUi,/failAIAnalysis\(\);\s+\} catch \{ failAIAnalysis\(\); \}/,'failed, not-found, non-OK, malformed, and transport status results stop polling with the controlled error');
 assert.match(diagnosticUi,/function failAIAnalysis\(\) \{\s+resetAnalysisProgress\(\);/,'failed polling resets the visual progress without showing completion');
 const aiFailureHandler=diagnosticUi.match(/function failAIAnalysis\(\) \{[\s\S]*?\n  \}/)?.[0]||'';
 assert.doesNotMatch(aiFailureHandler,/setAnalysisExhausted/,'429, 503, and timeout failures remain technical errors rather than conversion');

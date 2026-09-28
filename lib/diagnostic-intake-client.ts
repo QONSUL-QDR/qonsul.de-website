@@ -2,14 +2,16 @@ import { signature } from './cockpit-intake-client.ts';
 
 type Options = { baseUrl: string; secret: string; fetchImpl?: typeof fetch; attempts?: number; timeoutMs?: number };
 type DiagnosticResponse = { data?: { id?: string; reference?: string; status?: string; evidence_score?: number } };
+export type DiagnosticDeliveryErrorKind = 'configuration' | 'rejected' | 'unavailable' | 'protocol';
 
 export class DiagnosticDeliveryError extends Error {
   readonly transient: boolean;
   readonly httpStatus: number | null;
   readonly retryWithNewSubmissionId: boolean;
-  constructor(message: string, transient: boolean, httpStatus: number | null = null, retryWithNewSubmissionId = false) {
+  readonly kind: DiagnosticDeliveryErrorKind;
+  constructor(message: string, transient: boolean, httpStatus: number | null = null, retryWithNewSubmissionId = false, kind: DiagnosticDeliveryErrorKind = transient ? 'unavailable' : httpStatus ? 'rejected' : 'protocol') {
     super(message); this.name = 'DiagnosticDeliveryError'; this.transient = transient; this.httpStatus = httpStatus;
-    this.retryWithNewSubmissionId = retryWithNewSubmissionId;
+    this.retryWithNewSubmissionId = retryWithNewSubmissionId; this.kind = kind;
   }
 }
 
@@ -21,9 +23,11 @@ async function hasIdempotencyConflict(response: Response): Promise<boolean> {
 }
 
 function validOptions(options: Options) {
-  if (options.secret.length < 32) throw new DiagnosticDeliveryError('Diagnostic authentication is not configured.', false);
-  const base = new URL(options.baseUrl);
-  if (base.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(base.hostname)) throw new DiagnosticDeliveryError('Diagnostic URL must use HTTPS.', false);
+  if (options.secret.length < 32) throw new DiagnosticDeliveryError('Diagnostic authentication is not configured.', false, null, false, 'configuration');
+  let base: URL;
+  try { base = new URL(options.baseUrl); }
+  catch { throw new DiagnosticDeliveryError('Diagnostic URL is not configured.', false, null, false, 'configuration'); }
+  if (base.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(base.hostname)) throw new DiagnosticDeliveryError('Diagnostic URL must use HTTPS.', false, null, false, 'configuration');
   return base;
 }
 
@@ -52,7 +56,7 @@ async function post(path: string, event: Record<string, unknown>, options: Optio
 export async function deliverDiagnostic(event: Record<string, unknown>, options: Options) {
   const response = await post('/api/v1/intake/diagnostic', event, options);
   const result = await response.json() as DiagnosticResponse;
-  if (!result.data?.id || !result.data.reference || result.data.status !== 'completed') throw new DiagnosticDeliveryError('Unexpected diagnostic response.', false, response.status);
+  if (!result.data?.id || !result.data.reference || result.data.status !== 'completed') throw new DiagnosticDeliveryError('Unexpected diagnostic response.', false, response.status, false, 'protocol');
   return { id: result.data.id, reference: result.data.reference, evidenceScore: result.data.evidence_score ?? 0, replayed: response.status === 200 };
 }
 

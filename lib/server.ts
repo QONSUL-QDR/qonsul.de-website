@@ -1,8 +1,9 @@
 import { env } from 'cloudflare:workers';
+import { LocalDatabaseUnavailableError } from './runtime-errors';
 
 export { timingSafeEqual } from './timing-safe-equal';
 export function setting(key: string): string { return String((env as unknown as Record<string,unknown>)[key] || process.env[key] || ''); }
-export function rawDb(): D1Database { if(!env.DB) throw new Error('Datenspeicher ist nicht erreichbar.');return env.DB; }
+export function rawDb(): D1Database { if(!env.DB) throw new LocalDatabaseUnavailableError();return env.DB; }
 export function json(data: unknown, status=200, headers: HeadersInit = {}) { return Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers}}); }
 export async function readBody(request: Request) {
   const origin = request.headers.get('origin');

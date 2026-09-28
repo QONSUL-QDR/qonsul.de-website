@@ -35,6 +35,8 @@ assert.match(styles, /\.bottom-cta\{padding:90px 0\}/);
 assert.match(styles, /\.bottom-cta\{padding:65px 0\}/);
 assert.match(styles, /\.analytics-consent\{position:fixed;/);
 assert.match(styles, /\.analytics-consent-status\{position:fixed;/);
+assert.match(styles, /\.site-footer \.footer-bottom>div\{grid-column:2;justify-self:center\}/);
+assert.match(styles, /\.site-footer \.footer-bottom\{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-bottom:64px\}/);
 assert.doesNotMatch(styles, /\.analytics-consent-slot\{/);
 
 console.log('PASS production legal routes, footer links, fixed consent-gated website analytics, and responsive CTA grid anchoring');

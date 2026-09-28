@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = relative => readFile(new URL(`../${relative}`, import.meta.url), 'utf8');
-const [site, diagnosticUi, diagnosticRoute, aiRoute, aiStatusRoute, consent, styles] = await Promise.all([
+const [site, diagnosticUi, diagnosticRoute, aiRoute, aiStatusRoute, statusRoute, consent, styles] = await Promise.all([
   read('app/quality-site.tsx'),
   read('app/quality-diagnostic-lab.tsx'),
   read('app/api/diagnostics/route.ts'),
   read('app/api/diagnostic-ai-hypotheses/route.ts'),
   read('app/api/diagnostic-ai-hypotheses/status/route.ts'),
+  read('app/api/status/route.ts'),
   read('app/analytics-consent.tsx'),
   read('app/globals.css'),
 ]);
@@ -32,9 +33,23 @@ assert.match(diagnosticUi, /name="contactConsent"/);
 
 assert.match(styles, /\.analytics-consent\{position:fixed;/);
 assert.match(styles, /\.analytics-consent-status\{position:fixed;/);
+assert.match(styles, /\.site-footer \.footer-bottom\{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-bottom:64px\}/);
+assert.match(styles, /\.site-footer \.footer-bottom>div\{grid-column:2;justify-self:center\}/);
+assert.match(styles, /@media\(max-width:700px\)\{\.site-footer \.footer-bottom\{grid-template-columns:1fr;padding-bottom:68px\}/);
 assert.doesNotMatch(styles, /\.analytics-consent-slot\{/);
 assert.doesNotMatch(consent, /createPortal|footerSlot|getElementById\(['"]analytics-consent-slot/);
 
+assert.match(statusRoute, /isCockpitIntakeConfigured/);
+assert.match(statusRoute, /QONSUL_COCKPIT_INTAKE_URL/);
+assert.match(statusRoute, /QONSUL_COCKPIT_INTAKE_SECRET/);
+assert.match(statusRoute, /ai:intakeReady,diagnosticReady:intakeReady/);
+assert.doesNotMatch(statusRoute, /OPENAI_API_KEY/);
+
+assert.match(diagnosticUi, /response\.ok && result\.status === 'processing'[\s\S]*?aiPollingTimer\.current = setTimeout\(poll, 2_500\)/);
+assert.match(diagnosticUi, /if \(response\.ok && result\.status === 'completed' && result\.causes\) return applyAIHypotheses/);
+assert.match(diagnosticUi, /failAIAnalysis\(\);\s+\} catch \{ failAIAnalysis\(\); \}/);
+assert.doesNotMatch(diagnosticUi, /catch \{[^}]*aiPollingTimer\.current = setTimeout/);
+
 assert.doesNotMatch(diagnosticUi, /\/api\/reports|30 Tage|reportToken|storageConsent|crmConsent/);
 
-console.log('PASS restored visible Quality Diagnostic, AI routes, consultation handoff, fixed analytics consent, and explicit 30-day report exclusion');
+console.log('PASS restored Diagnostic integration, Cockpit readiness, bounded AI polling, centered footer links, fixed analytics consent, and explicit 30-day report exclusion');

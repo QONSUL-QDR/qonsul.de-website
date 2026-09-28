@@ -1,19 +1,17 @@
 import { diagnosticEvent, DIAGNOSTIC_PROCESSING_CONSENT_VERSION } from '@/lib/diagnostic-contract';
 import { deliverDiagnostic, DiagnosticDeliveryError, requestDiagnosticConsultation } from '@/lib/diagnostic-intake-client';
+import { diagnosticFailure } from '@/lib/diagnostic-response';
 import { parseAnalysis } from '@/lib/analysis';
 import { json, rateLimit, readBody, setting } from '@/lib/server';
 import { CONTACT_PRIVACY_VERSION } from '@/lib/contact';
 
 const uuid = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 const configured = () => ({ baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET') });
-const customerError = 'Die Analyse konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.';
 const correctionToken = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9_-]{43,128}$/.test(value);
 
 function diagnosticError(error: unknown) {
-  const status = error instanceof DiagnosticDeliveryError && error.transient ? 503 : error instanceof DiagnosticDeliveryError ? (error.httpStatus || 422) : 400;
-  const body: { error: string; retryWithNewSubmissionId?: true } = { error: customerError };
-  if (error instanceof DiagnosticDeliveryError && error.retryWithNewSubmissionId) body.retryWithNewSubmissionId = true;
-  return json(body, status);
+  const failure = diagnosticFailure(error);
+  return json(failure.body, failure.status);
 }
 
 export async function POST(request: Request) {
@@ -27,7 +25,7 @@ export async function POST(request: Request) {
     const analysis = parseAnalysis(body.analysis);
     const analyticsSessionId = uuid(body.analyticsSessionId) ? body.analyticsSessionId : null;
     const result = await deliverDiagnostic(diagnosticEvent(body.submissionId, analysis, analyticsSessionId), configured());
-    return json({ status: 'accepted', diagnostic: result }, result.replayed ? 200 : 201);
+    return json({ status: 'accepted', code: 'diagnostic_saved', diagnostic: result }, result.replayed ? 200 : 201);
   } catch (error) { return diagnosticError(error); }
 }
 

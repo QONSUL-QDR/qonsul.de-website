@@ -159,10 +159,12 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
         const result = await response.json() as { status?: 'processing' | 'completed' | 'failed' | 'not_found'; causes?: Cause[]; error?: string };
         if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
         if (response.ok && result.status === 'completed' && result.causes) return applyAIHypotheses({ causes: result.causes });
-        if (response.ok && result.status === 'failed') return failAIAnalysis();
-      } catch { /* A transient status error is retried until the bounded deadline. */ }
-      if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
-      aiPollingTimer.current = setTimeout(poll, 2_500);
+        if (response.ok && result.status === 'processing') {
+          aiPollingTimer.current = setTimeout(poll, 2_500);
+          return;
+        }
+        failAIAnalysis();
+      } catch { failAIAnalysis(); }
     };
     aiPollingTimer.current = setTimeout(poll, 3_000);
   }
