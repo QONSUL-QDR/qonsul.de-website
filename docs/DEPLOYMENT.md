@@ -1,5 +1,11 @@
 # Deployment und Domain
 
+## Phase 3c deployment topology
+
+GitHub `QONSUL-QDR/qonsul.de-website` is the source of truth. The Phase-3c integration baseline is `c57001a77e71060847bec0694d6d8a51ca314c58`, and the logical D1 binding remains `DB`.
+
+The standalone Worker `qonsul-quality-engineering` is the current test/staging target. The production target for `qonsul.de` is **not yet defined**. The existing Sites project remains a preview assignment and must not be treated as production merely because a domain mapping exists or is pending. Staging and production require separately verified D1 resources and server-side secrets before any cutover.
+
 ## Bestehenden Betrieb erhalten
 
 Die Vorschau bleibt auf https://qonsul-quality-lab.raphael-zajonz.chatgpt.site/ beim bestehenden Sites-Projekt. Die GitHub-Übergabe löst keinen Umzug, DNS-Wechsel oder Datenbankeingriff aus. GitHub ist die Quelle für Weiterentwicklung/Reviews; ein Merge veröffentlicht nicht automatisch.

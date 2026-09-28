@@ -1,6 +1,6 @@
 # QONSUL · Data · Quality · Risk
 
-Vollständige Beratungswebsite mit Ishikawa-Board, A4-PDF, Branchen-Bildfolge, Kontaktformular und optionaler KI-/CRM-Anbindung.
+Vollständige Beratungswebsite mit Ishikawa-Board, A4-PDF, Branchen-Bildfolge, Kontaktformular und optionaler KI-/QONSUL-Cockpit-Anbindung.
 
 **Status: Anwendungsvorschau, kein freigegebener Betrieb mit echten Kundendaten.** Das GitHub-Repository ist öffentlich. Die Übergabe verändert weder die Zugriffseinstellungen der laufenden Website noch ihre Datenbank.
 
@@ -48,7 +48,7 @@ pnpm build
 - Optional OpenAI Responses API; ohne Schlüssel/bei Fehlern Regeln. Hypothesen sind keine bewiesenen Ursachen.
 - Direkter PDF-Download ohne Kontaktdaten: eine A4-Seite quer, eingebettetes Drucklogo, sechs dezente Wasserzeichen, Firmenname und Website. Bis zu 30 Einträge; lange Texte mit Auslassungszeichen.
 - Gespeicherter vollständiger Report mit getrennten Einwilligungen und 30 Tage gültigem Zugriffsschlüssel.
-- Kontaktformular mit Name, E-Mail, optionalem Telefon/Unternehmen und Nachricht. Speicherung in D1; optional HubSpot und E-Mail-Zusammenfassung über Resend.
+- Kontaktformular mit Name, E-Mail, optionalem Telefon/Unternehmen und Nachricht. Speicherung in D1; produktive CRM-Übergabe sicher an das QONSUL Cockpit und optionale E-Mail-Zusammenfassung über Resend.
 - Löschung und begrenzte Aufbewahrung; keine Analyse-/Werbetracker.
 
 ## Struktur

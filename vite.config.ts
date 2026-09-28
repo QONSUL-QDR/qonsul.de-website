@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { sites } from '@openai/sites-vite-plugin';
 import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
@@ -8,6 +9,32 @@ import { PRODUCTION_PUBLIC_RUNTIME_V1 } from './lib/production-public-runtime.mj
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
+
+// Deployment-drift identifier: bakes the exact commit a build was produced
+// from into the compiled output at build time (esbuild `define`, below), so
+// it survives whatever deploys the resulting bundle afterwards (wrangler,
+// an OpenAI Sites-managed pipeline, etc.) without depending on that pipeline
+// remembering to set an env var. `GET /api/status` then exposes it — a
+// non-secret value, never a source of truth for authorization — so that
+// given only the Worker URL, the running commit can be confirmed rather
+// than assumed. A few hosted CI checkouts provide the commit via env instead
+// of a usable `.git`; those are tried first, then a local `git rev-parse`,
+// and finally 'unknown' rather than ever failing the build.
+function resolveBuildCommitSha(): string {
+  const fromEnv =
+    process.env.SOURCE_COMMIT_SHA || process.env.CF_PAGES_COMMIT_SHA || process.env.GITHUB_SHA;
+  if (fromEnv) return fromEnv;
+  try {
+    return execSync('git rev-parse HEAD', { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim();
+  } catch {
+    return 'unknown';
+  }
+}
+const buildCommitSha = resolveBuildCommitSha();
+function resolveBuildTreeSha(): string { try { return execSync('git rev-parse HEAD^{tree}', { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return 'unknown'; } }
+const buildTreeSha = resolveBuildTreeSha();
 
 const { d1, r2 } = hostingConfig;
 const isProductionArtifactBuild = process.env.PRODUCTION_ARTIFACT_BUILD === 'true';
@@ -76,6 +103,9 @@ export default defineConfig(async () => {
     define: {
       __QONSUL_SOURCE_COMMIT_SHA__: JSON.stringify(sourceCommit),
       __QONSUL_SOURCE_BUILD_ID__: JSON.stringify(sourceBuildId),
+      __QONSUL_BUILD_COMMIT_SHA__: JSON.stringify(buildCommitSha),
+      __QONSUL_BUILD_TREE_SHA__: JSON.stringify(buildTreeSha),
+      __QONSUL_BUILD_APPLICATION__: JSON.stringify('qonsul-website'),
     },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox

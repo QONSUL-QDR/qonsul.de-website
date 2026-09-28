@@ -1,0 +1,9 @@
+{
+  "source_event_id": "00000000-0000-4000-8000-000000000001",
+  "submitted_at": "2026-09-03T12:00:00.000Z",
+  "payload_schema_version": "1.0",
+  "contact": {"name": "Ada Lovelace", "email": "ada@example.org", "phone": "+49 123 456"},
+  "company": {"name": "Example GmbH"},
+  "payload": {"message": "Wir möchten ein konkretes Qualitätsthema besprechen."},
+  "consent": {"privacy_acknowledged": true, "privacy_version": "2026-08-31-v1"}
+}

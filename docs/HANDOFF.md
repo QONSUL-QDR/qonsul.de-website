@@ -20,7 +20,7 @@ Website, Runtime-Revision 5, DB-Bindung `DB` und Tabellen `reports`, `contact_re
 
 - [ ] Impressum, Datenschutz, Aufbewahrung und Löschprozess freigeben.
 - [ ] OpenAI-Zugang/Datenverarbeitung prüfen, falls KI gewünscht.
-- [ ] HubSpot und Resend-Absender/DNS einrichten; fiktive Zustelltests.
+- [ ] QONSUL-Cockpit-Intake-Secret sowie Resend-Absender/DNS einrichten; ausschließlich fiktive Zustelltests.
 - [ ] Empfänger info@qonsul.de und Geschäftskontaktdaten bestätigen.
 - [ ] Missbrauchsschutz und öffentliche Zugriffseinstellungen prüfen.
 - [ ] Geschütztes vollständiges Live-Backup mit Wiederherstellungsprobe.
