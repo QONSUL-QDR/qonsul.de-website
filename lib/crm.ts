@@ -1,58 +1,50 @@
-import { escapeHtml } from './report';
-import { CATEGORIES, type Analysis } from './analysis';
-import { rawDb, setting } from './server';
-export type Lead = {id:string;name:string;email:string;company:string;analysis:Analysis};
-export type ContactLead = {id:string;name:string;email:string;phone:string;company:string;message:string};
-async function hubspot(path:string,method:string,body?:unknown){
-  const response=await fetch(`https://api.hubspot.com${path}`,{method,signal:AbortSignal.timeout(4000),headers:{Authorization:`Bearer ${setting('HUBSPOT_ACCESS_TOKEN')}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
-  if(!response.ok)throw new Error(`CRM ${response.status}`);
-  return response.status===204?{}:await response.json() as Record<string,unknown>;
-}
-export async function syncLead(lead:Lead){
-  if(setting('PRODUCTION_READY')!=='true'||!setting('HUBSPOT_ACCESS_TOKEN'))return 'not_configured';
-  const db=rawDb();
-  // Atomic claim prevents repeated form submissions from duplicating CRM notes.
-  const claimed=await db.prepare("UPDATE reports SET crm_status = 'sending' WHERE id = ? AND crm_status = 'pending' RETURNING id").bind(lead.id).first();
-  if(!claimed)return 'pending';
-  try{
-    const found=await hubspot('/crm/v3/objects/contacts/search','POST',{filterGroups:[{filters:[{propertyName:'email',operator:'EQ',value:lead.email}]}],limit:1});
-    const existing=found.results as {id:string}[]|undefined;
-    let contactId=existing?.[0]?.id;
-    if(!contactId){const [firstname,...rest]=lead.name.split(' ');const created=await hubspot('/crm/v3/objects/contacts','POST',{properties:{email:lead.email,firstname,lastname:rest.join(' '),company:lead.company}});contactId=String(created.id);}
-    await db.prepare('UPDATE reports SET crm_contact_id = ? WHERE id = ?').bind(contactId,lead.id).run();
-    const e=escapeHtml;
-    const note=`<h2>QONSUL · Quality Diagnostic</h2><p><strong>${e(lead.analysis.problem)}</strong></p><p>Unternehmen: ${e(lead.company)} · Kontakt zur Analyse ausdrücklich gewünscht.</p><p>Hypothesen, keine bestätigten Ursachen. Analyse-Modus: ${lead.analysis.mode}.</p><p>Datentypen laut Selbstauskunft: ${(lead.analysis.availableData||[]).map(e).join(", ")||"Keine markiert"}. Keine Messdaten analysiert.</p>${CATEGORIES.map(c=>`<h3>${c}</h3><ul>${lead.analysis.causes.filter(x=>x.category===c).map(x=>`<li>[${x.source==='user'?'Beobachtung':x.source==='ai'?'KI':'Regelkatalog'}] ${e(x.text)}${x.check?` — Prüfen: ${e(x.check)}`:''}${x.data?.length?` — Benötigte Daten: ${x.data.map(e).join(", ")}`:""}${x.metric?` (${e(x.metric)})`:''}</li>`).join('')}</ul>`).join('')}<p>Interne Referenz: ${e(lead.id)}</p>`;
-    const createdNote=await hubspot('/crm/v3/objects/notes','POST',{properties:{hs_timestamp:new Date().toISOString(),hs_note_body:note},associations:[{to:{id:contactId},types:[{associationCategory:'HUBSPOT_DEFINED',associationTypeId:202}]}]});
-    await db.prepare("UPDATE reports SET crm_note_id = ?, crm_status = 'sent' WHERE id = ?").bind(String(createdNote.id),lead.id).run();
-    return 'sent';
-  }catch{
-    // A timeout may occur after HubSpot accepted a note. Avoid blind automatic retries.
-    await db.prepare("UPDATE reports SET crm_status = 'needs_review' WHERE id = ?").bind(lead.id).run();
-    return 'needs_review';
-  }
+import type {Analysis} from './analysis';
+import {deliverIntake,IntakeDeliveryError,type IntakeEvent} from './cockpit-intake-client';
+import {ishikawaSourceCauseId} from './ishikawa-source-id';
+import {rawDb,setting} from './server';
+
+export type DeliveryStatus='sent'|'pending'|'needs_review'|'not_configured'|'not_requested';
+export type ContactLead={id:string;name:string;email:string;phone:string;company:string;message:string;privacyVersion:string;submittedAt:number;analyticsSessionId?:string|null;diagnosticFlowId?:string|null};
+export type IshikawaLead={id:string;name:string;email:string;company:string;analysis:Analysis;consentVersion:string;submittedAt:number;analyticsSessionId?:string|null;diagnosticFlowId?:string|null};
+
+function options(){return {baseUrl:setting('QONSUL_COCKPIT_INTAKE_URL'),secret:setting('QONSUL_COCKPIT_INTAKE_SECRET')};}
+export function cockpitConfigured(){const value=options();return !!value.baseUrl&&value.secret.length>=32;}
+
+function auditDelivery(source:'contact'|'ishikawa',sourceEventId:string,outcome:DeliveryStatus,details:{httpStatus?:number|null;kind?:string}={}){
+  console.info(JSON.stringify({event:'qonsul.website_intake_delivery',source,source_event_id:sourceEventId,target_path:`/api/v1/intake/${source}`,http_status:details.httpStatus??null,delivery_status:outcome,retry_classification:outcome==='pending'?'transient':'not_retryable',failure_kind:details.kind??null}));
 }
 
-export async function syncContactLead(lead:ContactLead){
-  if(setting('PRODUCTION_READY')!=='true'||!setting('HUBSPOT_ACCESS_TOKEN'))return 'not_configured';
+async function send(source:'contact'|'ishikawa',event:IntakeEvent):Promise<DeliveryStatus>{
+  if(setting('PRODUCTION_READY')!=='true'){auditDelivery(source,event.source_event_id,'not_configured');return 'not_configured';}
+  if(!cockpitConfigured()){auditDelivery(source,event.source_event_id,'needs_review',{kind:'configuration'});return 'needs_review';}
+  try{const delivery=await deliverIntake(source,event,options());auditDelivery(source,event.source_event_id,'sent',{httpStatus:delivery.httpStatus});return 'sent';}
+  catch(error){const outcome=error instanceof IntakeDeliveryError&&error.transient?'pending':'needs_review';auditDelivery(source,event.source_event_id,outcome,{httpStatus:error instanceof IntakeDeliveryError?error.httpStatus:null,kind:error instanceof IntakeDeliveryError?error.kind:'transport'});return outcome;}
+}
+
+export async function syncContactLead(lead:ContactLead):Promise<DeliveryStatus>{
   const db=rawDb();
   const claimed=await db.prepare("UPDATE contact_requests SET crm_status = 'sending' WHERE id = ? AND crm_status = 'pending' RETURNING id").bind(lead.id).first();
-  if(!claimed)return 'pending';
-  try{
-    const found=await hubspot('/crm/v3/objects/contacts/search','POST',{filterGroups:[{filters:[{propertyName:'email',operator:'EQ',value:lead.email}]}],limit:1});
-    const existing=found.results as {id:string}[]|undefined;
-    const [firstname,...rest]=lead.name.split(/\s+/);
-    const properties={email:lead.email,firstname,lastname:rest.join(' '),...(lead.phone?{phone:lead.phone}:{}),...(lead.company?{company:lead.company}:{})};
-    let contactId=existing?.[0]?.id;
-    if(contactId)await hubspot(`/crm/v3/objects/contacts/${encodeURIComponent(contactId)}`,'PATCH',{properties});
-    else{const created=await hubspot('/crm/v3/objects/contacts','POST',{properties});contactId=String(created.id);}
-    await db.prepare('UPDATE contact_requests SET crm_contact_id = ? WHERE id = ?').bind(contactId,lead.id).run();
-    const e=escapeHtml;
-    const note=`<h2>QONSUL · Kontaktanfrage</h2><p><strong>Nachricht</strong></p><p>${e(lead.message).replace(/\n/g,'<br>')}</p><p><strong>Kontakt</strong><br>${e(lead.name)} · ${e(lead.email)}${lead.phone?` · ${e(lead.phone)}`:''}${lead.company?`<br>Unternehmen: ${e(lead.company)}`:''}</p><p>Interne Referenz: ${e(lead.id)}</p>`;
-    const createdNote=await hubspot('/crm/v3/objects/notes','POST',{properties:{hs_timestamp:new Date().toISOString(),hs_note_body:note},associations:[{to:{id:contactId},types:[{associationCategory:'HUBSPOT_DEFINED',associationTypeId:202}]}]});
-    await db.prepare("UPDATE contact_requests SET crm_note_id = ?, crm_status = 'sent' WHERE id = ?").bind(String(createdNote.id),lead.id).run();
-    return 'sent';
-  }catch{
-    await db.prepare("UPDATE contact_requests SET crm_status = 'needs_review' WHERE id = ?").bind(lead.id).run();
-    return 'needs_review';
-  }
+  if(!claimed)return (await db.prepare('SELECT crm_status FROM contact_requests WHERE id = ?').bind(lead.id).first<{crm_status:DeliveryStatus}>())?.crm_status||'needs_review';
+  const result=await send('contact',{
+    source_event_id:lead.id,submitted_at:new Date(lead.submittedAt).toISOString(),payload_schema_version:'1.0',
+    contact:{name:lead.name,email:lead.email,phone:lead.phone||null},company:{name:lead.company||null},payload:{message:lead.message},
+    consent:{privacy_acknowledged:true,privacy_version:lead.privacyVersion},analytics_session_id:lead.analyticsSessionId||null,diagnostic_flow_id:lead.diagnosticFlowId||null,
+  });
+  await db.prepare('UPDATE contact_requests SET crm_status = ? WHERE id = ?').bind(result,lead.id).run();
+  return result;
+}
+
+export async function syncLead(lead:IshikawaLead):Promise<DeliveryStatus>{
+  const db=rawDb();
+  const claimed=await db.prepare("UPDATE reports SET crm_status = 'sending' WHERE id = ? AND crm_status = 'pending' RETURNING id").bind(lead.id).first();
+  if(!claimed)return (await db.prepare('SELECT crm_status FROM reports WHERE id = ?').bind(lead.id).first<{crm_status:DeliveryStatus}>())?.crm_status||'needs_review';
+  const causes=await Promise.all(lead.analysis.causes.map(async cause=>({...cause,id:await ishikawaSourceCauseId(lead.id,cause.id)})));
+  const result=await send('ishikawa',{
+    source_event_id:lead.id,submitted_at:new Date(lead.submittedAt).toISOString(),payload_schema_version:'1.0',
+    contact:{name:lead.name,email:lead.email},company:{name:lead.company},
+    payload:{problem:lead.analysis.problem,mode:lead.analysis.mode,available_data:lead.analysis.availableData||[],causes},
+    consent:{storage_granted:true,contact_requested:true,consent_version:lead.consentVersion},analytics_session_id:lead.analyticsSessionId||null,diagnostic_flow_id:lead.diagnosticFlowId||null,
+  });
+  await db.prepare('UPDATE reports SET crm_status = ? WHERE id = ?').bind(result,lead.id).run();
+  return result;
 }

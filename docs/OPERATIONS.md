@@ -37,7 +37,7 @@ Persistenz: `.wrangler/state`. Vor einer Dateisicherung zugehörige Entwicklungs
 - Dependency-/Security-Meldungen prüfen. Kein automatisches Zusammenführen von Dependabot-PRs.
 - Täglich geschützten Wartungsendpunkt über freigegebenen Scheduler aufrufen; Secret aus Secret Store, nicht aus eingechecktem Skript.
 - CRM/Mail `sending` und `needs_review` über interne Referenz beim Anbieter abgleichen, bevor erneut zugestellt wird.
-- Lösch-/Auskunftsanfragen auch in bereits belieferten Drittsystemen bearbeiten. Reportlöschung löscht nicht automatisch HubSpot-Notizen/E-Mails.
+- Lösch-/Auskunftsanfragen auch im QONSUL Cockpit bearbeiten. Eine Reportlöschung auf der Website löscht dort bereits übermittelte Geschäftsunterlagen nicht automatisch.
 - Domain, TLS, Absenderverifikation, Zugangsschlüssel und Betreiberzugriff pflegen.
 - Je Veröffentlichung Commit, Build, Migrationen, Konfigurationsrevision, Zugriffsmodus und Rückfallversion dokumentieren.
 

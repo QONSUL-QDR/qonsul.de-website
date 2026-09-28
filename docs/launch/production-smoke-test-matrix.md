@@ -1,0 +1,33 @@
+# Production Smoke Test Matrix (run only after the actual DNS cutover)
+
+Status: **READY**. This is the exact, ordered test sequence for *after* `qonsul.de` has been pointed at the production Worker — it is not executed as part of this preparation pass (no cutover has happened). Each row: what to check, the expected result, the pass criterion, and what result should trigger the Rollback Runbook.
+
+| # | Test | Expected result | Pass criterion | Rollback trigger |
+|---|---|---|---|---|
+| 1 | `https://qonsul.de` loads | 200, homepage renders | Visual content matches the reviewed RC1 build; no blank/error page | Any non-200, blank page, or unstyled/broken render → Rollback Runbook scenario A |
+| 2 | `https://www.qonsul.de` loads | 301 redirect to `https://qonsul.de` | Redirect target is exactly the apex, over HTTPS, single hop | Redirect loop, wrong target, or 404 → Rollback Runbook scenario I (DNS/routing) |
+| 3 | Navigation (header/menu links) | All primary nav links resolve to 200 | No 404s on any linked route | A broken nav link → not necessarily a rollback trigger alone; a site-wide broken-nav pattern → scenario A |
+| 4 | `/impressum` | 200, legally-reviewed content renders | Content matches the Issue #6-approved legal text, not placeholder values | Placeholder/test legal values visible in production → **stop and treat as a launch-readiness failure**, not a code rollback (this is a content/config issue, not a Worker defect) |
+| 5 | `/datenschutz` | 200, legally-reviewed content renders | Same as #4 | Same as #4 |
+| 6 | Security headers present | All six headers on the response | `curl -I https://qonsul.de` shows CSP/HSTS/X-Frame-Options/X-Content-Type-Options/Referrer-Policy/Permissions-Policy, each exactly once | Missing any header, or any header duplicated → Rollback Runbook scenario B |
+| 7 | CSP correctness | `connect-src` includes `https://cockpit.qonsul.de`, no staging origin | String match against the exact expected CSP value (see Production Environment Matrix) | `cockpit-staging.qonsul.de` present, or `cockpit.qonsul.de` absent → Rollback Runbook scenario B (root-cause likely: wrong build-time env var) |
+| 8 | Browser console CSP check | No CSP violation messages | Open dev tools console on a real visit, confirm empty of CSP errors | Any CSP violation logged → Rollback Runbook scenario B |
+| 9 | Contact form submission | Form accepts a real (or clearly-marked test, per existing convention) submission | 200/success UI state after submit | Submission fails client-side or silently → Rollback Runbook scenario C |
+| 10 | Mail delivery for the contact submission | Notification email arrives at the configured recipient | Email received within a few minutes, correct content | No email within a reasonable window → Rollback Runbook scenario F (Resend), not necessarily C |
+| 11 | Ishikawa intake path | Analysis → save flow completes | Report is created, access token issued | Failure at any step → Rollback Runbook scenario D |
+| 12 | Cockpit intake receipt | Cockpit shows the submitted contact/Ishikawa lead | Cross-check with Cockpit side (`REPORTED BY CODEX` for the Cockpit-side confirmation) | Website reports success but Cockpit never receives it → Rollback Runbook scenario H, and check `PRODUCTION_READY`/secret config per the Environment Matrix first |
+| 13 | HMAC contract | Signed request accepted by Cockpit (not a 401/signature-mismatch) | Test #12's success implies this; a targeted synthetic contract test (see Cockpit Production Contract Test Plan) is the more precise check | 401/signature error from Cockpit → `PRODUCTION HMAC SYNCHRONIZATION REQUIRED`, do not regenerate the secret unilaterally |
+| 14 | Analytics — consent OFF | No analytics network activity | Browser network tab shows zero requests to the analytics endpoint before consent | Any analytics request fires without consent → this is a privacy/compliance defect, treat as scenario G and as a launch-blocking issue, not merely cosmetic |
+| 15 | Analytics — consent ON | `session_start` + `page_view` events fire | Network tab shows the beacon/fetch call to `https://cockpit.qonsul.de/api/v1/analytics/events` after granting consent | No request fires after consent → Rollback Runbook scenario G |
+| 16 | Page view event | Fires on route change | Additional `page_view` event per navigation (client-side routing) | Missing → scenario G |
+| 17 | CTA event | Fires on a `data-analytics-cta` element click | Event observed in network tab | Missing → scenario G |
+| 18 | Scroll event | Fires at 25/50/75/100% thresholds | All four thresholds observed once each per page view | Missing/duplicated → scenario G |
+| 19 | Conversion event | Fires on the relevant conversion action (per Cockpit contract) | Cross-check with Cockpit ingestion (`REPORTED BY CODEX`) | Not confirmable from Website side alone; escalate to Cockpit side if Website-side event fired but Cockpit shows nothing |
+| 20 | UTM attribution | First-touch/last-touch UTM params captured | A test visit with `?utm_source=...` shows the value in the emitted event payload | Missing/incorrect attribution → scenario G |
+| 21 | Analytics retry/idempotency | Re-sent events don't double-count | Only verifiable from the Cockpit ingestion side (`REPORTED BY CODEX`) — Website side just sends once per triggering action by design | N/A from Website side alone |
+| 22 | D1 persistence | New `contact_requests`/`reports` rows appear for real submissions | Confirmed via the same D1 query pattern as the Backup/Restore Runbook (read-only `SELECT COUNT(*)`) | No new rows despite a successful-looking UI submission → Rollback Runbook scenario E |
+| 23 | Worker logs | No unexpected errors during the smoke test window | Cloudflare dashboard/observability shows no error-level log spam correlated with the smoke test actions | Error spike → Rollback Runbook scenario A |
+| 24 | Edge rate limiting | Normal use unaffected; a deliberate controlled burst is rate-limited | See the Edge Rate Limiting Plan's "Controlled Edge Test" section for the exact request pattern | Legitimate single-request use gets rate-limited → mis-tuned rule, adjust threshold, not a code rollback |
+| 25 | Cockpit health | `cockpit.qonsul.de` itself is reachable and healthy | `REPORTED BY CODEX` — confirm via whoever owns Cockpit monitoring | Cockpit down independent of the Website cutover → Rollback Runbook scenario H, and this is not caused by nor fixable from the Website side |
+
+Run tests 1–8 (availability, navigation, legal pages, headers, CSP) before proceeding to 9 onward (functional/data paths) — an early-stage failure in 1–8 should stop the sequence and trigger rollback before spending time on the later, more involved functional tests.
