@@ -109,8 +109,11 @@ const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://c
   assert.equal(headers.has('Authorization'),false); publicAiSeen=true;
   return Response.json({hypotheses:[{id:'ai-1',category:'Prozess',text:'Synthetische KI-Hypothese',reasoning_summary:'Mit Daten prüfen.',origin:'ai'}]});
 }});
-assert.equal(publicAi[0].origin,'ai');
+assert.equal(publicAi.status,'completed');
+assert.equal(publicAi.hypotheses[0].origin,'ai');
 assert.equal(publicAiSeen,true);
+const publicAiSubmissionProcessing=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'processing'},{status:202})});
+assert.deepEqual(publicAiSubmissionProcessing,{status:'processing'},'an accepted asynchronous submission stays neutral until the status endpoint completes it');
 let publicAiStatusSeen=false;
 const publicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   const headers=new Headers(init?.headers),pathName=new URL(String(url)).pathname,timestamp=Number(headers.get('X-Qonsul-Timestamp')),body=String(init?.body);
@@ -189,6 +192,7 @@ assert.match(diagnosticUi,/aiPollingDeadlineTimer\.current = setTimeout\([\s\S]*
 assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling responses are settled only once');
 assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'[\s\S]*fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'/,'polling never invokes a second generation request');
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\);\s+try \{\s+const response = await fetch\('\/api\/diagnostic-ai-hypotheses'/,'status polling begins before the initial generation response can time out');
+assert.match(diagnosticUi,/if \(response\.ok && result\.status === 'processing'\) return;\s+if \(!response\.ok \|\| !result\.causes\)/,'an accepted asynchronous submission remains in the neutral polling state instead of becoming a UI error');
 assert.match(diagnosticUi,/\} catch \{ \/\* Status polling resolves controlled provider failures and timeouts\. \*\/ \}/,'an initial generation timeout does not stop active status polling or mark a final UI error');
 assert.match(diagnosticUi,/response\.ok && result\.status === 'completed' && result\.causes\) return applyAIHypotheses/,'a later completed status result is applied after an initial generation timeout');
 assert.match(diagnosticUi,/response\.ok && result\.status === 'processing'\) \{\s+aiPollingTimer\.current = setTimeout\(poll, 2_500\);\s+return;\s+\}/,'only an explicit processing status schedules another poll');
@@ -233,6 +237,7 @@ const publicAiRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/
 assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled retry hint');
 assert.match(publicAiRoute,/Die QONSUL-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe public QONSUL message');
 assert.match(publicAiRoute,/QONSUL-Hypothesen ergänzt\. Bitte mit Daten validieren; keine bestätigten Ursachen\./,'the successful public status message uses QONSUL hypotheses');
+assert.match(publicAiRoute,/if \(result\.status === 'processing'\) return json\(\{ status: 'processing' \}, 202\);/,'an accepted asynchronous Cockpit submission stays a successful processing response for the browser poller');
 assert.match(publicAiRoute,/Die QONSUL-Hypothesen konnten nicht ergänzt werden/,'generation errors use QONSUL hypotheses');
 assert.match(publicAiRoute,/return json\(\{ error: customerError \}, 503\)/,'provider failures remain controlled 503 technical errors');
 assert.match(publicAiRoute,/causes: analysis\.causes\.map\(cause => \(\{ category: cause\.category, text: cause\.text \}\)\)/,'the Website forwards all accepted and pending hypothesis context for duplicate avoidance without changing Cockpit');

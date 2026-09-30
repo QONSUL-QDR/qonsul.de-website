@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     if (!uuid(body.sourceEventId)) return json({ error: customerError }, 400);
     if (body.analysisRound !== 1 && body.analysisRound !== 2) return json({ error: customerError }, 400);
     const analysis = parseAnalysis({ problem: body.problem, causes: body.causes, availableData: [] });
-    const hypotheses = await requestPublicAIHypotheses({
+    const result = await requestPublicAIHypotheses({
       source_event_id: body.sourceEventId,
       analysis_round: body.analysisRound,
       problem: analysis.problem,
@@ -20,8 +20,9 @@ export async function POST(request: Request) {
       // help the second round avoid repetition, but do not persist as causes.
       causes: analysis.causes.map(cause => ({ category: cause.category, text: cause.text })),
     }, { baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET') });
+    if (result.status === 'processing') return json({ status: 'processing' }, 202);
 
-    const causes: Cause[] = hypotheses.map((hypothesis, index) => ({
+    const causes: Cause[] = result.hypotheses.map((hypothesis, index) => ({
       id: hypothesis.id || `ai-${index}`,
       category: CATEGORIES.includes(hypothesis.category as Category) ? hypothesis.category as Category : 'Prozess',
       text: hypothesis.text,

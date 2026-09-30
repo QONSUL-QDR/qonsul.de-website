@@ -190,7 +190,8 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45000), body: JSON.stringify({
         sourceEventId, analysisRound, problem, causes: [...causes, ...aiSuggestions],
       }) });
-      const result = await response.json() as { causes?: Cause[]; error?: string; notice?: string };
+      const result = await response.json() as { status?: 'processing'; causes?: Cause[]; error?: string; notice?: string };
+      if (response.ok && result.status === 'processing') return;
       if (!response.ok || !result.causes) throw new Error(result.error || 'QONSUL-Hypothesen konnten nicht ergänzt werden.');
       applyAIHypotheses(result);
     } catch { /* Status polling resolves controlled provider failures and timeouts. */ }

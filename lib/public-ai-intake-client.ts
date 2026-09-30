@@ -13,6 +13,10 @@ export type PublicAIHypothesesStatus = {
   hypotheses?: PublicAIHypothesis[];
 };
 
+export type PublicAIHypothesesSubmission =
+  | { status: 'processing' }
+  | { status: 'completed'; hypotheses: PublicAIHypothesis[] };
+
 export class PublicAIIntakeError extends Error {
   readonly transient: boolean;
   readonly httpStatus: number | null;
@@ -36,7 +40,7 @@ export class PublicAIIntakeError extends Error {
 export async function requestPublicAIHypotheses(
   event: { source_event_id: string; analysis_round: 1 | 2; problem: string; causes: { category: string; text: string }[] },
   options: { baseUrl: string; secret: string; fetchImpl?: typeof fetch; timeoutMs?: number },
-): Promise<PublicAIHypothesis[]> {
+): Promise<PublicAIHypothesesSubmission> {
   if (options.secret.length < 32) throw new PublicAIIntakeError(false);
   const base = new URL(options.baseUrl);
   if (base.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(base.hostname)) throw new PublicAIIntakeError(false);
@@ -60,9 +64,10 @@ export async function requestPublicAIHypotheses(
     const retryAfter = Number(response.headers.get('Retry-After'));
     throw new PublicAIIntakeError(response.status >= 500 || response.status === 429, response.status, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null, correlationId, base.hostname, path);
   }
-  const result = await response.json() as { hypotheses?: unknown };
+  const result = await response.json() as { status?: unknown; hypotheses?: unknown };
+  if (result.status === 'processing') return { status: 'processing' };
   if (!Array.isArray(result.hypotheses)) throw new PublicAIIntakeError(false);
-  return result.hypotheses as PublicAIHypothesis[];
+  return { status: 'completed', hypotheses: result.hypotheses as PublicAIHypothesis[] };
 }
 
 /** Reads only the Cockpit's cached public-AI state; it never requests generation. */
