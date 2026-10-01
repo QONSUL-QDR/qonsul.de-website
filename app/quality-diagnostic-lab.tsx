@@ -7,6 +7,7 @@ import { DIAGNOSTIC_PROCESSING_CONSENT_VERSION } from '@/lib/diagnostic-contract
 import { CONTACT_PRIVACY_VERSION } from '@/lib/contact';
 import { emitAnalyticsHook } from '@/lib/analytics-hooks';
 import { currentAnalyticsSessionId } from '@/lib/analytics-session';
+import { nextAIHypothesesPollingAction } from '@/lib/ai-polling';
 import { invalidateDraftSubmissionId, submissionIdForSave, withSavingState } from '@/lib/diagnostic-submission-lifecycle';
 import { readConsultationCorrectionLink, storeConsultationCorrectionLink } from '@/lib/consultation-correction-storage';
 
@@ -121,6 +122,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   function applyAIHypotheses(result: { causes?: Cause[]; notice?: string }) {
     if (aiResultApplied.current || !result.causes) return;
     aiResultApplied.current = true;
+    setError('');
     stopAIPolling();
     const supplementalByCategory = new Map<Category, number>(CATEGORIES.map(category => [category, causes.filter(item => item.category === category && item.source !== 'user').length]));
     const accepted = result.causes.filter(candidate => {
@@ -150,7 +152,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   function beginAIPolling(sourceEventId: string) {
     const pollingFlow = ++aiPollingFlow.current;
     aiPollingDeadlineTimer.current = setTimeout(() => {
-      if (pollingFlow === aiPollingFlow.current && !aiResultApplied.current) failAIAnalysis();
+      if (pollingFlow === aiPollingFlow.current && !aiResultApplied.current && nextAIHypothesesPollingAction({ kind: 'timeout' }) === 'fail') failAIAnalysis();
     }, 90_000);
     const poll = async () => {
       if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
@@ -158,8 +160,9 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
         const response = await fetch('/api/diagnostic-ai-hypotheses/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(12_000), body: JSON.stringify({ sourceEventId }) });
         const result = await response.json() as { status?: 'processing' | 'completed' | 'failed' | 'not_found'; causes?: Cause[]; error?: string };
         if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
-        if (response.ok && result.status === 'completed' && result.causes) return applyAIHypotheses({ causes: result.causes });
-        if (response.ok && result.status === 'processing') {
+        const action = nextAIHypothesesPollingAction({ kind: 'status', responseOk: response.ok, status: result.status, hasCauses: Boolean(result.causes) });
+        if (action === 'apply' && result.causes) return applyAIHypotheses({ causes: result.causes });
+        if (action === 'poll') {
           aiPollingTimer.current = setTimeout(poll, 2_500);
           return;
         }
@@ -192,7 +195,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       }) });
       const result = await response.json() as { status?: 'processing'; causes?: Cause[]; error?: string; notice?: string };
       if (response.ok && result.status === 'processing') return;
-      if (!response.ok || !result.causes) throw new Error(result.error || 'QONSUL-Hypothesen konnten nicht ergänzt werden.');
+      if (!response.ok || !result.causes) return failAIAnalysis();
       applyAIHypotheses(result);
     } catch { /* Status polling resolves controlled provider failures and timeouts. */ }
   }

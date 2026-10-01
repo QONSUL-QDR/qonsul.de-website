@@ -4,6 +4,7 @@ import {diagnosticEvent,DIAGNOSTIC_PROCESSING_CONSENT_VERSION} from '../lib/diag
 import {deliverDiagnostic,requestDiagnosticConsultation,correctDiagnosticConsultationEmail,DiagnosticDeliveryError} from '../lib/diagnostic-intake-client.ts';
 import {signature} from '../lib/cockpit-intake-client.ts';
 import {requestPublicAIHypotheses,requestPublicAIHypothesesStatus,PublicAIIntakeError} from '../lib/public-ai-intake-client.ts';
+import {nextAIHypothesesPollingAction} from '../lib/ai-polling.ts';
 import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
 import {suggestBlindSpots} from '../lib/analysis.ts';
 import {isCockpitIntakeConfigured} from '../lib/cockpit-intake-config.ts';
@@ -127,6 +128,25 @@ assert.equal(publicAiStatus.status,'completed');
 assert.equal(publicAiStatusSeen,true);
 const publicAiProcessing=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'processing'})});
 assert.deepEqual(publicAiProcessing,{status:'processing'});
+const cockpitHypotheses=[{id:'cockpit-ai-1',category:'Prozess',text:'Vom Cockpit gelieferte Hypothese',reasoning_summary:'Mit Daten prüfen.',origin:'ai'}];
+const pendingSubmissionSequence=[
+  {kind:'status',responseOk:true,status:'not_found',hasCauses:false},
+  {kind:'status',responseOk:true,status:'processing',hasCauses:false},
+  {kind:'status',responseOk:true,status:'completed',hasCauses:true},
+];
+const pollingActions=pendingSubmissionSequence.map(nextAIHypothesesPollingAction);
+assert.deepEqual(pollingActions,['poll','poll','apply'],'a running submission polls through not_found and processing until a completed Cockpit result applies');
+const simulatedAiView={error:'Die QONSUL-Hypothesen konnten nicht ergänzt werden.',hypotheses:[]};
+for (let index=0;index<pollingActions.length;index++) {
+  if (pollingActions[index] === 'apply') {
+    simulatedAiView.error='';
+    simulatedAiView.hypotheses=cockpitHypotheses;
+  }
+}
+assert.deepEqual(simulatedAiView,{error:'',hypotheses:cockpitHypotheses},'the completed transition applies the Cockpit hypotheses and clears a stale AI error without inventing hypotheses');
+assert.equal(nextAIHypothesesPollingAction({kind:'status',responseOk:true,status:'failed',hasCauses:false}),'fail','a failed status is terminal');
+assert.equal(nextAIHypothesesPollingAction({kind:'status',responseOk:false,status:'processing',hasCauses:false}),'fail','a non-successful status response is terminal');
+assert.equal(nextAIHypothesesPollingAction({kind:'timeout'}),'fail','the polling deadline is terminal');
 await assert.rejects(()=>requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret:'short'}),PublicAIIntakeError);
 await assert.rejects(
   () => requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'60'}})}),
@@ -193,10 +213,15 @@ assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling res
 assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'[\s\S]*fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'/,'polling never invokes a second generation request');
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\);\s+try \{\s+const response = await fetch\('\/api\/diagnostic-ai-hypotheses'/,'status polling begins before the initial generation response can time out');
 assert.match(diagnosticUi,/if \(response\.ok && result\.status === 'processing'\) return;\s+if \(!response\.ok \|\| !result\.causes\)/,'an accepted asynchronous submission remains in the neutral polling state instead of becoming a UI error');
+assert.match(diagnosticUi,/nextAIHypothesesPollingAction\(\{ kind: 'status', responseOk: response\.ok, status: result\.status, hasCauses: Boolean\(result\.causes\) \}\)/,'the UI resolves each status response through the tested polling transition');
 assert.match(diagnosticUi,/\} catch \{ \/\* Status polling resolves controlled provider failures and timeouts\. \*\/ \}/,'an initial generation timeout does not stop active status polling or mark a final UI error');
-assert.match(diagnosticUi,/response\.ok && result\.status === 'completed' && result\.causes\) return applyAIHypotheses/,'a later completed status result is applied after an initial generation timeout');
-assert.match(diagnosticUi,/response\.ok && result\.status === 'processing'\) \{\s+aiPollingTimer\.current = setTimeout\(poll, 2_500\);\s+return;\s+\}/,'only an explicit processing status schedules another poll');
-assert.match(diagnosticUi,/failAIAnalysis\(\);\s+\} catch \{ failAIAnalysis\(\); \}/,'failed, not-found, non-OK, malformed, and transport status results stop polling with the controlled error');
+assert.match(diagnosticUi,/action === 'apply' && result\.causes\) return applyAIHypotheses/,'a completed polling transition applies the Cockpit hypotheses');
+assert.match(diagnosticUi,/action === 'poll'\) \{\s+aiPollingTimer\.current = setTimeout\(poll, 2_500\);\s+return;\s+\}/,'a pending polling transition schedules another poll');
+assert.match(diagnosticUi,/failAIAnalysis\(\);\s+\} catch \{ failAIAnalysis\(\); \}/,'failed, non-OK, malformed, and transport status results stop polling with the controlled error');
+assert.match(diagnosticUi,/if \(!response\.ok \|\| !result\.causes\) return failAIAnalysis\(\);/,'a genuine failed initial submission stops polling with the controlled error');
+assert.match(diagnosticUi,/nextAIHypothesesPollingAction\(\{ kind: 'timeout' \}\) === 'fail'/,'the UI routes its polling deadline through the tested terminal transition');
+const aiSuccessHandler=diagnosticUi.match(/function applyAIHypotheses\(result: \{ causes\?: Cause\[\]; notice\?: string \}\) \{[\s\S]*?\n  \}/)?.[0]||'';
+assert.match(aiSuccessHandler,/setError\(''\);/,'a successful AI result clears any stale AI error');
 assert.match(diagnosticUi,/function failAIAnalysis\(\) \{\s+resetAnalysisProgress\(\);/,'failed polling resets the visual progress without showing completion');
 const aiFailureHandler=diagnosticUi.match(/function failAIAnalysis\(\) \{[\s\S]*?\n  \}/)?.[0]||'';
 assert.doesNotMatch(aiFailureHandler,/setAnalysisExhausted/,'429, 503, and timeout failures remain technical errors rather than conversion');
