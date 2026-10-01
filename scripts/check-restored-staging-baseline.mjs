@@ -45,8 +45,9 @@ assert.match(statusRoute, /QONSUL_COCKPIT_INTAKE_SECRET/);
 assert.match(statusRoute, /ai:intakeReady,diagnosticReady:intakeReady/);
 assert.doesNotMatch(statusRoute, /OPENAI_API_KEY/);
 
-assert.match(diagnosticUi, /response\.ok && result\.status === 'processing'[\s\S]*?aiPollingTimer\.current = setTimeout\(poll, 2_500\)/);
-assert.match(diagnosticUi, /if \(response\.ok && result\.status === 'completed' && result\.causes\) return applyAIHypotheses/);
+assert.match(diagnosticUi, /nextAIHypothesesPollingAction\(\{ kind: 'status', responseOk: response\.ok, status: result\.status, hasCauses: Boolean\(result\.causes\) \}\)/);
+assert.match(diagnosticUi, /action === 'poll'[\s\S]*?aiPollingTimer\.current = setTimeout\(poll, 2_500\)/);
+assert.match(diagnosticUi, /action === 'apply' && result\.causes\) return applyAIHypotheses/);
 assert.match(diagnosticUi, /failAIAnalysis\(\);\s+\} catch \{ failAIAnalysis\(\); \}/);
 assert.doesNotMatch(diagnosticUi, /catch \{[^}]*aiPollingTimer\.current = setTimeout/);
 
