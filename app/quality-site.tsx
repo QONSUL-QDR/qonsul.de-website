@@ -2,7 +2,7 @@
 import Brand from '@/app/brand';
 import Link from 'next/link';
 import { useState } from 'react';
-import IshikawaLab from './ishikawa-lab';
+import QualityDiagnosticLab from './quality-diagnostic-lab';
 import SiteContent from './site-content';
 import HeroSlideshow from './hero-slideshow';
 import ContactDialog from './contact-dialog';
@@ -36,10 +36,10 @@ export default function QualitySite() {
       </HeroSlideshow>
       <section className="positioning section-wrap" id="positionierung"><div className="section-index">01 / UNSER ANSPRUCH</div><h2>Komplexe Probleme.<br/>Belastbare Entscheidungen.</h2><div className="positioning-copy"><p>Qualitätsprobleme entstehen im Zusammenspiel von Produkt, Prozess und Menschen. Ihre Lösung braucht mehr als eine einzelne Perspektive.</p><p>QONSUL verbindet präventive Qualitätsmethoden mit technischer Risikoanalyse und Daten. Wir machen Zusammenhänge sichtbar, prüfen Hypothesen und helfen Ihrem Team, wirksame Maßnahmen zu priorisieren.</p></div></section>
       <SiteContent/>
-      <section className="diagnostic-section"><div className="section-wrap diagnostic-heading"><span className="section-index">05 / QUALITY DIAGNOSTIC</span><h2>Der erste Schritt<br/>ist eine gute Frage.</h2><p>Bringen Sie Ihr Qualitätsproblem mit. Gemeinsam werden aus Beobachtungen prüfbare Hypothesen.</p></div><IshikawaLab launch={launch}/></section>
+      <section className="diagnostic-section"><div className="section-wrap diagnostic-heading"><span className="section-index">05 / QUALITY DIAGNOSTIC</span><h2>Der erste Schritt<br/>ist eine gute Frage.</h2><p>Bringen Sie Ihr Qualitätsproblem mit. Gemeinsam werden aus Beobachtungen prüfbare Hypothesen.</p></div><QualityDiagnosticLab launch={launch}/></section>
       <section className="bottom-cta" id="kontakt"><div className="section-wrap"><div><div className="eyebrow">VON DER ANALYSE ZUR VERÄNDERUNG</div><h2>Was möchten Sie<br/>besser verstehen?</h2><p>Strukturieren Sie Ihre Herausforderung und nehmen Sie die Analyse als Grundlage für Ihr Team oder ein Gespräch mit QONSUL mit.</p></div><button type="button" className="button button-lime" onClick={()=>setContactOpen(true)}>Kontakt aufnehmen ↗</button></div></section>
     </main>
-    <footer className="site-footer"><div className="footer-top"><Link className="brand" href="/"><Brand/></Link><p>Data. Quality. Risk.<br/>Bessere Entscheidungen beginnen hier.</p><nav aria-label="Footernavigation"><a href="#leistungen">Kompetenzen</a><a href="#ueber-uns">Über QONSUL</a><a href="#insights">Insights</a><button type="button" data-analytics-cta="footer-contact" data-analytics-placement="footer" onClick={()=>setContactOpen(true)}>Kontakt</button></nav></div><div className="footer-bottom"><span>© {new Date().getFullYear()} QONSUL Managementberatung</span><div><Link href="/impressum">Impressum</Link><Link href="/datenschutz">Datenschutz</Link></div></div><div id="analytics-consent-slot" className="analytics-consent-slot" /></footer>
+    <footer className="site-footer"><div className="footer-top"><Link className="brand" href="/"><Brand/></Link><p>Data. Quality. Risk.<br/>Bessere Entscheidungen beginnen hier.</p><nav aria-label="Footernavigation"><a href="#leistungen">Kompetenzen</a><a href="#ueber-uns">Über QONSUL</a><a href="#insights">Insights</a><button type="button" data-analytics-cta="footer-contact" data-analytics-placement="footer" onClick={()=>setContactOpen(true)}>Kontakt</button></nav></div><div className="footer-bottom"><span>© {new Date().getFullYear()} QONSUL Managementberatung</span><div><Link href="/impressum">Impressum</Link><Link href="/datenschutz">Datenschutz</Link></div></div></footer>
     <ContactDialog open={contactOpen} onClose={()=>setContactOpen(false)}/>
   </>;
 }

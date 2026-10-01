@@ -23,16 +23,20 @@ assert.match(imprint, /href="\/datenschutz"/);
 assert.match(layout, /<AnalyticsClient \/>\{children\}<AnalyticsConsent \/>/);
 assert.match(consent, /Optionale Website-Analyse/);
 assert.match(consent, /localStorage\.setItem\(ANALYTICS_CONSENT_STORAGE_KEY, next\)/);
-assert.match(consent, /createPortal\(control, footerSlot\)/);
+assert.doesNotMatch(consent, /createPortal|footerSlot|analytics-consent-slot/);
 assert.match(analytics, /analyticsConsentGranted\(window\.localStorage\.getItem/);
 assert.match(analytics, /credentials: 'omit'/);
 assert.doesNotMatch(analytics, /contact_message|problem_statement|cause_text/);
 
 assert.match(site, /<Link href="\/impressum">Impressum<\/Link><Link href="\/datenschutz">Datenschutz<\/Link>/);
 assert.match(site, /<section className="bottom-cta" id="kontakt"><div className="section-wrap">/);
-assert.match(site, /id="analytics-consent-slot" className="analytics-consent-slot"/);
+assert.doesNotMatch(site, /analytics-consent-slot/);
 assert.match(styles, /\.bottom-cta\{padding:90px 0\}/);
 assert.match(styles, /\.bottom-cta\{padding:65px 0\}/);
-assert.match(styles, /\.analytics-consent-slot\{display:flex;justify-content:flex-end/);
+assert.match(styles, /\.analytics-consent\{position:fixed;/);
+assert.match(styles, /\.analytics-consent-status\{position:fixed;/);
+assert.match(styles, /\.site-footer \.footer-bottom>div\{grid-column:2;justify-self:center\}/);
+assert.match(styles, /\.site-footer \.footer-bottom\{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-bottom:64px\}/);
+assert.doesNotMatch(styles, /\.analytics-consent-slot\{/);
 
-console.log('PASS production legal routes, footer links, consent-gated website analytics, and responsive CTA grid anchoring');
+console.log('PASS production legal routes, footer links, fixed consent-gated website analytics, and responsive CTA grid anchoring');
