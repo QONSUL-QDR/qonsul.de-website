@@ -113,6 +113,14 @@ const publicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://c
 assert.equal(publicAi.status,'completed');
 assert.equal(publicAi.hypotheses[0].origin,'ai');
 assert.equal(publicAiSeen,true);
+const completeHypotheses=['Produkt','Prozess','Material','Mensch','Messung','Umgebung'].flatMap(category=>[1,2].map(index=>({
+  id:`ai-${category}-${index}`,category,text:`Synthetischer Mechanismus ${category} ${index}`,
+  reasoning_summary:`Synthetische Erklärung ${index}. Prüfen: Vergleich ${category} ${index}.`,origin:'ai',
+})));
+const completePublicAi=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({hypotheses:completeHypotheses})});
+assert.deepEqual(completePublicAi,{status:'completed',hypotheses:completeHypotheses},'the signed Website client preserves all twelve Cockpit hypotheses and their order');
+const completePublicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'completed',hypotheses:completeHypotheses})});
+assert.deepEqual(completePublicAiStatus,{status:'completed',hypotheses:completeHypotheses},'the read-only status client preserves the same complete result');
 const publicAiSubmissionProcessing=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'processing'},{status:202})});
 assert.deepEqual(publicAiSubmissionProcessing,{status:'processing'},'an accepted asynchronous submission stays neutral until the status endpoint completes it');
 let publicAiStatusSeen=false;
@@ -156,7 +164,8 @@ const blindSpotProblems=['Bremskraft von Bremszange wird nicht erreicht','Messda
 const blindSpotSets=blindSpotProblems.map(problem=>suggestBlindSpots(problem,[{id:'covered',category:'Produkt',text:'Synthetische Beobachtung',source:'user'}]));
 assert.equal(blindSpotSets.every(spots=>spots.every(spot=>spot.category!=='Produkt'&&spot.prompt.endsWith('?'))),true,'blind spots are questions only for uncovered categories');
 assert.equal(new Set(blindSpotSets.map(spots=>spots.map(spot=>spot.prompt).join('|'))).size,3,'distinct problem contexts receive distinct blind-spot prompts');
-const diagnosticUi=await readFile(new URL('../app/quality-diagnostic-lab.tsx',import.meta.url),'utf8');
+const diagnosticUi=(await readFile(new URL('../app/quality-diagnostic-lab.tsx',import.meta.url),'utf8')).replace(/\r\n/g,'\n');
+assert.match(diagnosticUi,/item\.source !== 'user'/,'the Website counts accepted supplemental hypotheses separately from user causes');
 for(const marker of ['fish-layout','fish-lines','fish-problem','AUSGANGSPUNKT','+ Eigene Ursache','Ihre Perspektive ergänzen','Was übersehen wir vielleicht?'])assert.match(diagnosticUi,new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 assert.match(diagnosticUi,/cause\.source === 'user' \? 'Eigene Beobachtung' : cause\.source === 'ai' \? 'QONSUL-Hypothese/,'accepted system hypotheses use the public QONSUL terminology');
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostics'/);
@@ -259,6 +268,7 @@ assert.match(diagnosticUi,/setBlindSpots\(uncovered\.length \? uncovered : sugge
 assert.match(diagnosticUi,/Diese Fragen sind Untersuchungsperspektiven und keine Ursachen\./,'blind-spot semantics are explicit in the UI');
 assert.match(diagnosticUi,/Eigene Beobachtung formulieren/,'blind spots guide the user to the existing own-cause action instead of being added automatically');
 const publicAiRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/route.ts',import.meta.url),'utf8');
+assert.match(publicAiRoute,/result\.hypotheses\.map\(\(hypothesis, index\) => \(\{/,'the Website submission route maps the complete Cockpit array without slicing');
 assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled retry hint');
 assert.match(publicAiRoute,/Die QONSUL-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe public QONSUL message');
 assert.match(publicAiRoute,/QONSUL-Hypothesen ergänzt\. Bitte mit Daten validieren; keine bestätigten Ursachen\./,'the successful public status message uses QONSUL hypotheses');
@@ -270,6 +280,7 @@ assert.match(publicAiRoute,/body\.analysisRound !== 1 && body\.analysisRound !==
 assert.match(publicAiRoute,/analysis_round: body\.analysisRound/,'the Website forwards the explicit round to Cockpit');
 assert.doesNotMatch(publicAiRoute,/analysis\.causes\.filter\(cause => cause\.source === 'user'\)/,'AI context is no longer restricted to user observations alone');
 const publicAiStatusRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/status/route.ts',import.meta.url),'utf8');
+assert.match(publicAiStatusRoute,/result\.hypotheses!\.map\(\(hypothesis, index\) => \(\{/,'the Website status route maps the complete Cockpit array without slicing');
 assert.match(publicAiStatusRoute,/Die QONSUL-Hypothesen konnten nicht ergänzt werden/,'status errors use QONSUL hypotheses');
 assert.match(publicAiStatusRoute,/requestPublicAIHypothesesStatus/,'the browser-facing status endpoint signs a server-side Cockpit status request');
 assert.doesNotMatch(publicAiStatusRoute,/requestPublicAIHypotheses\(/,'the status endpoint cannot start generation');
