@@ -173,6 +173,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   async function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current || analysisExhausted) return;
+    if (!status.ai) return setNotice('Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
     if (completedAIRounds >= 2) {
       activateAnalysisConversion();
       return;
@@ -193,8 +194,14 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45000), body: JSON.stringify({
         sourceEventId, analysisRound, problem, causes: [...causes, ...aiSuggestions],
       }) });
-      const result = await response.json() as { status?: 'processing'; causes?: Cause[]; error?: string; notice?: string };
+      const result = await response.json() as { status?: 'processing'; causes?: Cause[]; error?: string; notice?: string; code?: string };
       if (response.ok && result.status === 'processing') return;
+      if (result.code === 'ai_intake_not_configured') {
+        failAIAnalysis();
+        setError('');
+        setNotice('Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
+        return;
+      }
       if (!response.ok || !result.causes) return failAIAnalysis();
       applyAIHypotheses(result);
     } catch { /* Status polling resolves controlled provider failures and timeouts. */ }
