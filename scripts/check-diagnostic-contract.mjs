@@ -123,6 +123,16 @@ const completePublicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent
 assert.deepEqual(completePublicAiStatus,{status:'completed',hypotheses:completeHypotheses},'the read-only status client preserves the same complete result');
 const publicAiSubmissionProcessing=await requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'processing'},{status:202})});
 assert.deepEqual(publicAiSubmissionProcessing,{status:'processing'},'an accepted asynchronous submission stays neutral until the status endpoint completes it');
+const secondRoundEvent={...publicAiEvent,source_event_id:'44444444-4444-4444-8444-444444444444',analysis_round:2,causes:completeHypotheses.map(hypothesis=>({category:hypothesis.category,text:hypothesis.text}))};
+let secondRoundCalls=0;
+const secondRoundSubmission=await requestPublicAIHypotheses(secondRoundEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(_url,init)=>{
+  secondRoundCalls++;
+  assert.equal(JSON.parse(String(init?.body)).source_event_id,secondRoundEvent.source_event_id);
+  assert.equal(JSON.parse(String(init?.body)).analysis_round,2);
+  return Response.json({status:'processing'},{status:202});
+}});
+assert.deepEqual(secondRoundSubmission,{status:'processing'},'a deliberate second click submits a fresh valid round-two request');
+assert.equal(secondRoundCalls,1,'the deliberate second click starts exactly one new Cockpit request');
 let publicAiStatusSeen=false;
 const publicAiStatus=await requestPublicAIHypothesesStatus(publicAiEvent.source_event_id,{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   const headers=new Headers(init?.headers),pathName=new URL(String(url)).pathname,timestamp=Number(headers.get('X-Qonsul-Timestamp')),body=String(init?.body);
@@ -155,7 +165,15 @@ assert.deepEqual(simulatedAiView,{error:'',hypotheses:cockpitHypotheses},'the co
 assert.equal(nextAIHypothesesPollingAction({kind:'status',responseOk:true,status:'failed',hasCauses:false}),'fail','a failed status is terminal');
 assert.equal(nextAIHypothesesPollingAction({kind:'status',responseOk:false,status:'processing',hasCauses:false}),'fail','a non-successful status response is terminal');
 assert.equal(nextAIHypothesesPollingAction({kind:'timeout'}),'fail','the polling deadline is terminal');
-await assert.rejects(()=>requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret:'short'}),PublicAIIntakeError);
+await assert.rejects(()=>requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret:'short'}),error=>
+  error instanceof PublicAIIntakeError && error.reason==='configuration' && !error.outboundAttempted && Boolean(error.correlationId) && error.targetHost==='cockpit.example' && error.targetPath==='/api/v1/intake/diagnostic/ai-hypotheses',
+);
+await assert.rejects(()=>requestPublicAIHypotheses(secondRoundEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'failed'})}),error=>
+  error instanceof PublicAIIntakeError && error.reason==='cockpit_failed' && error.outboundAttempted && error.httpStatus===200 && Boolean(error.correlationId) && error.targetHost==='cockpit.example',
+);
+await assert.rejects(()=>requestPublicAIHypotheses(secondRoundEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'completed'})}),error=>
+  error instanceof PublicAIIntakeError && error.reason==='invalid_response' && error.outboundAttempted && error.httpStatus===200 && Boolean(error.correlationId),
+);
 await assert.rejects(
   () => requestPublicAIHypotheses(publicAiEvent,{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>new Response('{}',{status:429,headers:{'Retry-After':'60'}})}),
   error => error instanceof PublicAIIntakeError && error.httpStatus === 429 && error.retryAfterSeconds === 60,
@@ -184,6 +202,8 @@ assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses'/,'Public Dia
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\)/,'AI responses remain separate from the Cause Map until user selection');
 assert.match(diagnosticUi,/const \[completedAIRounds, setCompletedAIRounds\] = useState\(0\)/,'the AI round counter starts at zero for every new Diagnostic flow');
 assert.match(diagnosticUi,/const analysisRound: 1 \| 2 = completedAIRounds === 0 \? 1 : 2/,'the browser derives an explicit first or second analysis round without changing the UX');
+assert.match(diagnosticUi,/if \(!status\.ai\) return setNotice\('Die QONSUL-Analyse ist derzeit nicht verfügbar\./,'an unavailable intake is explained before either click can start generation');
+assert.match(diagnosticUi,/if \(regenerate\) aiRequestId\.current = '';/,'a deliberate second click clears the first round request ID before creating another');
 assert.match(diagnosticUi,/sourceEventId, analysisRound, problem, causes: \[\.\.\.causes, \.\.\.aiSuggestions\]/,'each bounded AI generation sends its round and preserves the original problem plus unconfirmed context');
 assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+activateAnalysisConversion\(\);[\s\S]*?\} else \{\s+setCompletedAIRounds\(previous => Math\.min\(previous \+ 1, 2\)\);/,'only a successful AI result with at least one usable hypothesis advances a bounded round counter');
 assert.match(diagnosticUi,/\{!analysisExhausted && completedAIRounds === 0 && <button[^>]+boost-action-button[^>]+onClick=\{\(\) => addAIHypotheses\(\)\}[\s\S]*?QONSUL Expertise einbeziehen/,'the initial QONSUL action is visible only before the first successful AI round and never beside conversion');
@@ -221,7 +241,7 @@ assert.match(diagnosticUi,/aiPollingDeadlineTimer\.current = setTimeout\([\s\S]*
 assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling responses are settled only once');
 assert.doesNotMatch(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'[\s\S]*fetch\('\/api\/diagnostic-ai-hypotheses', { method: 'POST'/,'polling never invokes a second generation request');
 assert.match(diagnosticUi,/beginAIPolling\(sourceEventId\);\s+try \{\s+const response = await fetch\('\/api\/diagnostic-ai-hypotheses'/,'status polling begins before the initial generation response can time out');
-assert.match(diagnosticUi,/if \(response\.ok && result\.status === 'processing'\) return;\s+if \(!response\.ok \|\| !result\.causes\)/,'an accepted asynchronous submission remains in the neutral polling state instead of becoming a UI error');
+assert.match(diagnosticUi,/if \(response\.ok && result\.status === 'processing'\) return;[\s\S]*?if \(!response\.ok \|\| !result\.causes\)/,'an accepted asynchronous submission remains in the neutral polling state instead of becoming a UI error');
 assert.match(diagnosticUi,/nextAIHypothesesPollingAction\(\{ kind: 'status', responseOk: response\.ok, status: result\.status, hasCauses: Boolean\(result\.causes\) \}\)/,'the UI resolves each status response through the tested polling transition');
 assert.match(diagnosticUi,/\} catch \{ \/\* Status polling resolves controlled provider failures and timeouts\. \*\/ \}/,'an initial generation timeout does not stop active status polling or mark a final UI error');
 assert.match(diagnosticUi,/action === 'apply' && result\.causes\) return applyAIHypotheses/,'a completed polling transition applies the Cockpit hypotheses');
@@ -268,6 +288,8 @@ assert.match(diagnosticUi,/setBlindSpots\(uncovered\.length \? uncovered : sugge
 assert.match(diagnosticUi,/Diese Fragen sind Untersuchungsperspektiven und keine Ursachen\./,'blind-spot semantics are explicit in the UI');
 assert.match(diagnosticUi,/Eigene Beobachtung formulieren/,'blind spots guide the user to the existing own-cause action instead of being added automatically');
 const publicAiRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/route.ts',import.meta.url),'utf8');
+assert.match(publicAiRoute,/reason: error\.reason/,'the staging intake trace identifies configuration and provider response failures');
+assert.match(publicAiRoute,/outbound_attempted: error\.outboundAttempted/,'the trace does not falsely claim an outbound request for configuration failures');
 assert.match(publicAiRoute,/result\.hypotheses\.map\(\(hypothesis, index\) => \(\{/,'the Website submission route maps the complete Cockpit array without slicing');
 assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled retry hint');
 assert.match(publicAiRoute,/Die QONSUL-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe public QONSUL message');

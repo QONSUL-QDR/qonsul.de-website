@@ -9,7 +9,7 @@ const status=await (await fetch(base+'/api/status')).json();assert.equal(status.
 assert.equal(status.contactReady,false,'Do not send external CRM or email messages in preview tests');
 const diagnosticPayload={submissionId:crypto.randomUUID(),analysis:seed,diagnosticConsent:true,consentVersion:'diagnostic-processing-consent-v1.0-2026-09-03',demoConfirmed:true};
 const unconfiguredDiagnostic=await request('/api/diagnostics',diagnosticPayload);check(unconfiguredDiagnostic.status===503&&unconfiguredDiagnostic.data.code==='diagnostic_intake_not_configured','Diagnostic storage fails closed with a clear code when Cockpit intake is not configured');
-const unconfiguredAi=await request('/api/diagnostic-ai-hypotheses',{sourceEventId:crypto.randomUUID(),analysisRound:1,problem:seed.problem,causes:seed.causes});check(unconfiguredAi.status===503,'AI intake fails closed when Cockpit intake is not configured');
+const unconfiguredAi=await request('/api/diagnostic-ai-hypotheses',{sourceEventId:crypto.randomUUID(),analysisRound:1,problem:seed.problem,causes:seed.causes});check(unconfiguredAi.status===424&&unconfiguredAi.data.code==='ai_intake_not_configured','AI intake reports missing configuration without an outbound request');
 const badOrigin=await request('/api/analyze',seed,{Origin:'https://evil.example'});check([400,403].includes(badOrigin.status),'Cross-origin analysis rejected');
 const invalid=await request('/api/analyze',{problem:'bad',causes:[]});check(invalid.status===400,'Short problem rejected');
 const malformed=await request('/api/analyze',{...seed,causes:[{category:'__proto__',text:'Invalid category',source:'user'}]});check(malformed.status===400,'Unknown category rejected');

@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     return json({ status: 'completed', causes });
   } catch (error) {
     if (setting('STAGING_AI_INTAKE_TRACE') === 'true' && error instanceof PublicAIIntakeError) {
-      console.info('staging_ai_intake_trace', JSON.stringify({ correlation_id: error.correlationId, handler_reached: true, outbound_attempted: true, target_host: error.targetHost, target_path: error.targetPath, method: 'POST', content_type: 'application/json', hmac_header_present: true, timestamp_header_present: true, cockpit_status: error.httpStatus, network_failure: error.networkFailure }));
+      console.info('staging_ai_intake_trace', JSON.stringify({ correlation_id: error.correlationId, handler_reached: true, outbound_attempted: error.outboundAttempted, reason: error.reason, target_host: error.targetHost, target_path: error.targetPath, method: 'POST', content_type: 'application/json', hmac_header_present: error.outboundAttempted, timestamp_header_present: error.outboundAttempted, cockpit_status: error.httpStatus, network_failure: error.networkFailure }));
     }
     return json({ error: customerError }, 503);
   }
