@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import ts from 'typescript';
+import {transformSync} from 'esbuild';
 import fs from 'node:fs';
-const asModule=source=>'data:text/javascript;base64,'+Buffer.from(ts.transpile(source,{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022})).toString('base64');
+const asModule=source=>'data:text/javascript;base64,'+Buffer.from(transformSync(source,{loader:'ts',format:'esm',target:'es2022'}).code).toString('base64');
 const analysisUrl=asModule(fs.readFileSync(new URL('../lib/analysis.ts',import.meta.url),'utf8'));
 const {CATEGORIES,DATA_KINDS,suggestRules,parseAnalysis,redactForAI}=await import(analysisUrl);
 const reportSource=fs.readFileSync(new URL('../lib/report.ts',import.meta.url),'utf8').replace("'./analysis'",JSON.stringify(analysisUrl));
