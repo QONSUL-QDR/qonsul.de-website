@@ -4,7 +4,10 @@ export type PublicAIHypothesis = {
   id: string;
   category: string;
   text: string;
-  reasoning_summary: string;
+  reasoning_summary?: string;
+  origin_ref?: string;
+  mechanism?: string;
+  recommended_check?: string;
   origin: 'ai';
 };
 
@@ -53,7 +56,8 @@ function target(options: { baseUrl: string; secret: string }, path: string) {
 }
 
 export async function requestPublicAIHypotheses(
-  event: { source_event_id: string; analysis_round: 1 | 2; problem: string; causes: { category: string; text: string }[] },
+  event: { source_event_id: string; analysis_round: 1 | 2; problem: string; causes: { category: string; text: string }[];
+    focus_causes?: import('./public-ai-rounds.ts').FocusCause[]; prior_hypotheses?: import('./public-ai-rounds.ts').PriorHypothesis[] },
   options: { baseUrl: string; secret: string; fetchImpl?: typeof fetch; timeoutMs?: number },
 ): Promise<PublicAIHypothesesSubmission> {
   const path = '/api/v1/intake/diagnostic/ai-hypotheses';
