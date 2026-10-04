@@ -38,7 +38,9 @@ assert.match(consultationPut, /company: \{ name: company \}/, 'a valid company i
 assert.match(diagnosticRoute.split('export async function POST(request: Request)')[1].split('export async function PUT(request: Request)')[0], /body\.demoConfirmed !== true/, 'Diagnostic saving still requires preview test-data confirmation');
 
 assert.match(contactUi, /<label>Unternehmen \*<input name="company" autoComplete="organization" required/);
+assert.doesNotMatch(contactUi, /name="demo"|demoConfirmed|Ich bestätige, ausschließlich fiktive Testdaten zu verwenden\./, 'the general contact form has no test-data checkbox or payload');
 assert.match(contactRoute, /requiredCompany\(body\.company\)/);
+assert.doesNotMatch(contactRoute.split('export async function POST(request:Request)')[1].split('export async function DELETE(request:Request)')[0], /demoConfirmed/, 'POST /api/contact does not require test-data confirmation');
 assert.match(imprint, /mailto:info@qonsul\.de/);
 assert.match(imprint, /HRB 781990/);
 assert.match(imprint, /Bildnachweise/);

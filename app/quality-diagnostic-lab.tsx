@@ -213,7 +213,6 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current || analysisExhausted) return;
-    if (!status.ai) return setNotice('Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
     if (completedAIRounds >= 2) {
       activateAnalysisConversion();
       return;

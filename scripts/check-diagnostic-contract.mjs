@@ -209,7 +209,8 @@ assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses'/,'Public Dia
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\)/,'AI responses remain separate from the Cause Map until user selection');
 assert.match(diagnosticUi,/const \[completedAIRounds, setCompletedAIRounds\] = useState\(0\)/,'the AI round counter starts at zero for every new Diagnostic flow');
 assert.match(diagnosticUi,/const analysisRound: 1 \| 2 = completedAIRounds === 0 \? 1 : 2/,'the browser derives an explicit first or second analysis round without changing the UX');
-assert.match(diagnosticUi,/if \(!status\.ai\) return setNotice\('Die QONSUL-Analyse ist derzeit nicht verfügbar\./,'an unavailable intake is explained before either click can start generation');
+assert.doesNotMatch(diagnosticUi,/if \(!status\.ai\)/,'an unresolved advisory readiness request cannot discard the first AI click');
+assert.match(diagnosticUi,/result\.code === 'ai_intake_not_configured'\) return \{ status: 'failed', reason: 'unavailable' \}/,'the server still provides the unavailable result after a genuine failed start');
 assert.match(diagnosticUi,/const sourceEventId = crypto\.randomUUID\(\);/,'each accepted click creates a new source event ID rather than replaying a previous request');
 assert.match(diagnosticUi,/sourceEventId: id, analysisRound: round, problem, \.\.\.focused/,'the second round sends only its explicit focused snapshot');
 assert.match(diagnosticUi,/if \(round === 2\) \{[\s\S]*?setRoundTwoSuggestions\(result\.causes \|\| \[\]\);[\s\S]*?setCompletedAIRounds\(2\);[\s\S]*?activateAnalysisConversion\(\)/,'the second result is shown and closes further generation');

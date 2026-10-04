@@ -16,7 +16,6 @@ export async function POST(request:Request){
     const body=await readBody(request);
     if(body.website)throw new Error('Anfrage abgelehnt.');
     if(body.privacyAcknowledged!==true||body.privacyVersion!==CONTACT_PRIVACY_VERSION)throw new Error('Bitte bestätigen Sie, dass Sie die Datenschutzhinweise gelesen haben.');
-    if(setting('PRODUCTION_READY')!=='true'&&body.demoConfirmed!==true)throw new Error('In der privaten Vorschau bitte nur fiktive Testdaten verwenden und dies bestätigen.');
     const name=value(body,'name',100),email=value(body,'email',254).toLowerCase(),phone=value(body,'phone',50,false),company=requiredCompany(body.company),message=value(body,'message',2000);
     if(name.length<2)throw new Error('Bitte Ihren Namen angeben.');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Bitte eine gültige E-Mail-Adresse angeben.');
