@@ -1,4 +1,4 @@
-import { CATEGORIES, type Category, type Cause } from '@/lib/analysis';
+import { publicHypothesesAsCauses } from '@/lib/public-ai-rounds';
 import { PublicAIIntakeError, requestPublicAIHypothesesStatus } from '@/lib/public-ai-intake-client';
 import { json, rateLimit, readBody, setting } from '@/lib/server';
 
@@ -14,13 +14,7 @@ export async function POST(request: Request) {
       baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET'),
     });
     if (result.status !== 'completed') return json({ status: result.status });
-    const causes: Cause[] = result.hypotheses!.map((hypothesis, index) => ({
-      id: hypothesis.id || `ai-${index}`,
-      category: CATEGORIES.includes(hypothesis.category as Category) ? hypothesis.category as Category : 'Prozess',
-      text: hypothesis.text,
-      check: hypothesis.reasoning_summary,
-      source: 'ai',
-    }));
+    const causes = publicHypothesesAsCauses(result.hypotheses!, body.analysisRound === 2 ? 2 : 1);
     return json({ status: 'completed', causes });
   } catch (error) {
     if (setting('STAGING_AI_INTAKE_TRACE') === 'true' && error instanceof PublicAIIntakeError) {

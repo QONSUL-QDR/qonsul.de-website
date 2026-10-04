@@ -47,7 +47,7 @@ assert.match(statusRoute, /ai:intakeReady,diagnosticReady:intakeReady/);
 assert.doesNotMatch(statusRoute, /OPENAI_API_KEY/);
 
 assert.match(diagnosticUi, /startAIHypothesesRun<Cause>\(\{/);
-assert.match(diagnosticUi, /onComplete: result => applyAIHypotheses\(result\)/);
+assert.match(diagnosticUi, /onComplete: result => applyAIHypotheses\(result, analysisRound, sourceEventId, targets\)/);
 assert.match(diagnosticUi, /onFail: failAIAnalysis/);
 assert.match(aiPolling, /deadlineMs \?\? 90_000/);
 assert.match(aiPolling, /if \(active\) schedulePoll\(options\.pollIntervalMs \?\? 2_500\)/);
