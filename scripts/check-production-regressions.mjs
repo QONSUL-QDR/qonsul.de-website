@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [privacy, imprint, layout, site, styles, analytics, consent] = await Promise.all([
+const [privacyPage, privacy, imprint, layout, site, styles, analytics, consent] = await Promise.all([
   readFile(new URL('../app/datenschutz/page.tsx', import.meta.url), 'utf8'),
+  readFile(new URL('../docs/legal/QONSUL_Datenschutzhinweise_Veroeffentlichungsfassung_2026-10-04.md', import.meta.url), 'utf8'),
   readFile(new URL('../app/impressum/page.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../app/layout.tsx', import.meta.url), 'utf8'),
   readFile(new URL('../app/quality-site.tsx', import.meta.url), 'utf8'),
@@ -11,13 +12,15 @@ const [privacy, imprint, layout, site, styles, analytics, consent] = await Promi
   readFile(new URL('../app/analytics-consent.tsx', import.meta.url), 'utf8'),
 ]);
 
-assert.match(privacy, /<h2>3\. Optionale Website-Analyse<\/h2>/);
+assert.match(privacyPage, /QONSUL_Datenschutzhinweise_Veroeffentlichungsfassung_2026-10-04\.md\?raw/);
+assert.match(privacy, /## 3\. Optionale Website-Analyse/);
 assert.match(privacy, /keine funktionsfremden Cookies/);
-assert.match(privacy, /kein Browser-Fingerprinting/);
+assert.match(privacy, /Browser-Fingerprinting und eine Zusammenführung mit Ihrer Identität finden nicht statt/);
 assert.match(privacy, /90 Tage als Rohdaten/);
 assert.match(privacy, /24 Monate/);
 assert.match(imprint, /<h2>Anbieter<\/h2>/);
-assert.match(imprint, /<h2>Verbraucherstreitbeilegung<\/h2>/);
+assert.match(imprint, /HRB 781990/);
+assert.doesNotMatch(imprint, /Verbraucherstreitbeilegung|Verbraucherschlichtungsstelle/);
 assert.match(imprint, /href="\/datenschutz"/);
 
 assert.match(layout, /<AnalyticsClient \/>\{children\}<AnalyticsConsent \/>/);
