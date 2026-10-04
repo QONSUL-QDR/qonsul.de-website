@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = relative => readFile(new URL(`../${relative}`, import.meta.url), 'utf8');
-const [site, diagnosticUi, diagnosticRoute, aiRoute, aiStatusRoute, statusRoute, consent, styles] = await Promise.all([
+const [site, diagnosticUi, diagnosticRoute, aiRoute, aiStatusRoute, statusRoute, consent, styles, aiPolling] = await Promise.all([
   read('app/quality-site.tsx'),
   read('app/quality-diagnostic-lab.tsx'),
   read('app/api/diagnostics/route.ts'),
@@ -11,6 +11,7 @@ const [site, diagnosticUi, diagnosticRoute, aiRoute, aiStatusRoute, statusRoute,
   read('app/api/status/route.ts'),
   read('app/analytics-consent.tsx'),
   read('app/globals.css'),
+  read('lib/ai-polling.ts'),
 ]);
 
 assert.match(site, /import QualityDiagnosticLab from '\.\/quality-diagnostic-lab'/);
@@ -45,11 +46,12 @@ assert.match(statusRoute, /QONSUL_COCKPIT_INTAKE_SECRET/);
 assert.match(statusRoute, /ai:intakeReady,diagnosticReady:intakeReady/);
 assert.doesNotMatch(statusRoute, /OPENAI_API_KEY/);
 
-assert.match(diagnosticUi, /nextAIHypothesesPollingAction\(\{ kind: 'status', responseOk: response\.ok, status: result\.status, hasCauses: Boolean\(result\.causes\) \}\)/);
-assert.match(diagnosticUi, /action === 'poll'[\s\S]*?aiPollingTimer\.current = setTimeout\(poll, 2_500\)/);
-assert.match(diagnosticUi, /action === 'apply' && result\.causes\) return applyAIHypotheses/);
-assert.match(diagnosticUi, /failAIAnalysis\(\);\s+\} catch \{ failAIAnalysis\(\); \}/);
-assert.doesNotMatch(diagnosticUi, /catch \{[^}]*aiPollingTimer\.current = setTimeout/);
+assert.match(diagnosticUi, /startAIHypothesesRun<Cause>\(\{/);
+assert.match(diagnosticUi, /onComplete: result => applyAIHypotheses\(result\)/);
+assert.match(diagnosticUi, /onFail: failAIAnalysis/);
+assert.match(aiPolling, /deadlineMs \?\? 90_000/);
+assert.match(aiPolling, /if \(active\) schedulePoll\(options\.pollIntervalMs \?\? 2_500\)/);
+assert.match(aiPolling, /controller\.abort\(\)/);
 
 assert.doesNotMatch(diagnosticUi, /\/api\/reports|30 Tage|reportToken|storageConsent|crmConsent/);
 
