@@ -63,14 +63,16 @@ try {
   assert.equal(status.contactEmail, PRODUCTION_PUBLIC_RUNTIME_V1.PUBLIC_CONTACT_EMAIL);
 
   const renderedPages = {};
-  for (const [route, file, expectedKeys] of [
-    ['/impressum', 'impressum.html', ['LEGAL_ENTITY_NAME', 'LEGAL_ADDRESS', 'LEGAL_REPRESENTATIVE', 'LEGAL_PHONE', 'LEGAL_REGISTER', 'LEGAL_VAT_ID', 'LEGAL_EDITORIAL_RESPONSIBLE', 'LEGAL_DISPUTE_RESOLUTION', 'PUBLIC_CONTACT_EMAIL']],
-    ['/datenschutz', 'datenschutz.html', ['LEGAL_ENTITY_NAME', 'LEGAL_ADDRESS', 'PUBLIC_CONTACT_EMAIL']],
+  for (const [route, file, requiredText] of [
+    ['/impressum', 'impressum.html', ['QONSUL Managementberatung UG (haftungsbeschränkt)', 'Unterboihinger Straße 24', '72644 Oberboihingen', 'Amtsgericht Stuttgart', 'HRB 781990', 'DE348271542', '+49 7022 9686-004', 'info@qonsul.de', 'Bildnachweise']],
+    ['/datenschutz', 'datenschutz.html', ['QONSUL Managementberatung UG (haftungsbeschränkt)', 'Unterboihinger Straße 24', '72644 Oberboihingen', '+49 7022 9686-004', 'info@qonsul.de', 'Art. 44 ff. DSGVO', 'Soweit der Versand produktiv aktiviert ist']],
   ]) {
     const response = await fetch(`${base}${route}`);
     assert.equal(response.status, 200, `${route} must render successfully`);
     const html = await response.text();
-    for (const key of expectedKeys) assert.ok(html.includes(PRODUCTION_PUBLIC_RUNTIME_V1[key]), `${route} must render ${key}`);
+    for (const value of requiredText) assert.ok(html.includes(value), `${route} must render ${value}`);
+    assert.doesNotMatch(html, /raphael\.zajonz@qonsul\.de/i, `${route} must show only the public contact address`);
+    if (route === '/impressum') assert.doesNotMatch(html, /Verbraucherstreitbeilegung|Verbraucherschlichtungsstelle/);
     assert.doesNotMatch(html, /class="preview-note"|Entwurf vor dem öffentlichen Launch|noch zu ergänzen|vor Freigabe zu hinterlegen|vor Veröffentlichung zu bestätigen|noch zu bestätigen|abhängig von Mitarbeiterzahl/, `${route} must not render draft text or placeholders`);
     renderedPages[file] = html;
   }

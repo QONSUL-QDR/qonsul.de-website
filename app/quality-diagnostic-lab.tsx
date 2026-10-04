@@ -11,6 +11,7 @@ import { startAIHypothesesRun } from '@/lib/ai-polling';
 import { focusedRoundRequest } from '@/lib/public-ai-rounds';
 import { invalidateDraftSubmissionId, submissionIdForSave, withSavingState } from '@/lib/diagnostic-submission-lifecycle';
 import { readConsultationCorrectionLink, storeConsultationCorrectionLink } from '@/lib/consultation-correction-storage';
+import { requiredCompany } from '@/lib/required-company';
 
 const examples = ['Sporadische Ausfälle bei hohen Temperaturen', 'Steigende Ausschussquote in der Fertigung', 'Qualität schwankt zwischen Lieferchargen'];
 const initialStatus = { ai: false, productionReady: false };
@@ -212,7 +213,6 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   }
   function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current || analysisExhausted) return;
-    if (!status.ai) return setNotice('Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
     if (completedAIRounds >= 2) {
       activateAnalysisConversion();
       return;
@@ -270,20 +270,24 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     });
   }
   async function requestConsultation(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (!saved) return; setBusy(true); setConsultationNotice('');
+    event.preventDefault(); if (!saved) return;
+    const form = new FormData(event.currentTarget);
+    let company: string;
+    try { company = requiredCompany(form.get('company')); }
+    catch { setConsultationNotice('Bitte geben Sie Ihr Unternehmen an.'); return; }
+    setBusy(true); setConsultationNotice('');
     if (!consultationId.current) consultationId.current = crypto.randomUUID();
     if (!consultationCorrectionToken.current) consultationCorrectionToken.current = createCorrectionToken();
     try {
-      const form = new FormData(event.currentTarget);
       const response = await fetch('/api/diagnostics', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(25000), body: JSON.stringify({
-        consultationId: consultationId.current, correctionToken: consultationCorrectionToken.current, diagnosticId: saved.id, name: form.get('name'), email: form.get('email'), company: form.get('company'), website: form.get('website'),
-        contactConsent: form.get('contactConsent') === 'on', privacyVersion: CONTACT_PRIVACY_VERSION, demoConfirmed: form.get('demoConfirmed') === 'on',
+        consultationId: consultationId.current, correctionToken: consultationCorrectionToken.current, diagnosticId: saved.id, name: form.get('name'), email: form.get('email'), company, website: form.get('website'),
+        contactConsent: form.get('contactConsent') === 'on', privacyVersion: CONTACT_PRIVACY_VERSION,
       }) });
       const result = await response.json() as { error?: string; status?: string; correctionPath?: string };
       if (!response.ok || !result.status || !result.correctionPath) throw new Error(result.error || 'Beratungsanfrage konnte nicht übermittelt werden.');
       storeConsultationCorrectionLink(result.correctionPath);
       setCorrectionPath(result.correctionPath);
-      setConsultationNotice('Ihre Anfrage ist eingegangen. Wir haben Ihnen eine Bestätigungs-E-Mail gesendet.');
+      setConsultationNotice('Ihre Anfrage ist eingegangen.');
     } catch { setConsultationNotice('Die Beratungsanfrage konnte nicht übermittelt werden. Bitte versuchen Sie es erneut.'); } finally { setBusy(false); }
   }
 
@@ -307,7 +311,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       {analysisExhausted && <section className="analysis-exhausted" aria-live="polite"><span className="eyebrow">NÄCHSTER SCHRITT</span><h3>Analyseperspektiven umfassend ausgeschöpft</h3><p>Sie haben die verfügbaren Analyseperspektiven bereits umfassend ausgeschöpft. Für eine weitere Vertiefung sind zusätzliche Kontextinformationen, Messdaten oder eine fachliche Bewertung sinnvoll.</p><p>Wenn Sie möchten, prüfen wir Ihre Analyse gemeinsam und besprechen unverbindlich die nächsten Schritte.</p><button type="button" className="button button-outline" onClick={continueToConsultation}>Analyse mit QONSUL vertiefen →</button></section>}
       <section className="data-inventory"><span className="eyebrow">DIE DATENGRUNDLAGE</span><h3>Welche Daten stehen bereits zur Verfügung?</h3><p>Es werden keine Dateien hochgeladen und keine Messwerte in der Website verarbeitet.</p><div className="data-options">{DATA_KINDS.map(kind => <label key={kind}><input type="checkbox" checked={availableData.includes(kind)} onChange={event => { invalidateDraftSubmission(); setAvailableData(previous => event.target.checked ? [...previous, kind] : previous.filter(item => item !== kind)); setSaved(null); }} />{kind}</label>)}</div></section>
       {causes.length > 0 && !saved && <form id="diagnostic-save" className="lead-form diagnostic-content-wrap" onSubmit={submitDiagnostic}><div className="lead-heading"><h3>Diagnostic sicher speichern</h3><p>Die Diagnostic wird separat im QONSUL Cockpit angelegt. Ohne Beratungsanfrage werden keine CRM-Kontakte oder Leads erzeugt.</p></div><div className="honey" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div><label className="check-label"><input name="diagnosticConsent" type="checkbox" required onChange={invalidateDraftSubmission} /> <span>Ich willige in die Verarbeitung meiner Diagnostic für die strukturierte Qualitätsanalyse ein. <a href="/datenschutz">Datenschutzhinweise</a></span></label>{!status.productionReady && <label className="check-label"><input name="demoConfirmed" type="checkbox" required onChange={invalidateDraftSubmission} /><span>Ich verwende ausschließlich fiktive Testdaten für diese private Vorschau.</span></label>}{error && <p role="alert" className="error-message">{error}</p>}<div className="lead-submit"><span>Keine Contact- oder CRM-Erstellung ohne die folgende ausdrückliche Anfrage.</span><button className="button button-green" disabled={busy}>{busy ? 'Diagnostic wird gesichert …' : analysisExhausted ? 'Diagnostic sichern und Analyse mit QONSUL vertiefen' : 'Diagnostic sichern'}</button></div></form>}
-      {saved && <div className="lead-content diagnostic-result diagnostic-content-wrap"><div className="save-success" role="status"><span className="success-mark">✓</span><h3>Ihre Quality Diagnostic ist gesichert.</h3><p>Referenz: {saved.reference}. Beobachtungen, Hypothesen und Datenbasis wurden getrennt dokumentiert.</p><button className="button button-outline" type="button" onClick={() => setConsultationOpen(open => !open)}>Persönliche Beratung anfragen ↗</button></div>{consultationOpen && <form className="lead-form" onSubmit={requestConsultation}><div className="lead-heading"><h3>Optional: Persönliche Beratung</h3><p>Diese separate Einwilligung löst erst jetzt die CRM-Zuordnung aus. Kein Newsletter.</p></div><div className="lead-fields"><label>Name<input name="name" required maxLength={100} autoComplete="name" /></label><label>Geschäftliche E-Mail<input name="email" type="email" required maxLength={254} autoComplete="email" /></label><label>Unternehmen<input name="company" maxLength={150} autoComplete="organization" /></label></div><div className="honey" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div><label className="check-label"><input name="contactConsent" type="checkbox" required /> <span>Ich wünsche eine persönliche Beratung zu dieser Quality Diagnostic und stimme der Kontaktaufnahme per E-Mail zu.</span></label>{!status.productionReady && <label className="check-label"><input name="demoConfirmed" type="checkbox" required /><span>Ich verwende ausschließlich fiktive Testdaten für diese private Vorschau.</span></label>}<div className="lead-submit"><span>Die Diagnostic bleibt auch bei einer CRM-Prüfung sicher erhalten.</span><button className="button button-green" disabled={busy}>{busy ? 'Anfrage wird übermittelt …' : 'Beratung anfragen ↗'}</button></div>{consultationNotice && <p role="status" className="crm-notice">{consultationNotice}</p>}{correctionPath && <a className="button button-outline" href={correctionPath}>E-Mail-Adresse korrigieren</a>}</form>}</div>}
+      {saved && <div className="lead-content diagnostic-result diagnostic-content-wrap"><div className="save-success" role="status"><span className="success-mark">✓</span><h3>Ihre Quality Diagnostic ist gesichert.</h3><p>Referenz: {saved.reference}. Beobachtungen, Hypothesen und Datenbasis wurden getrennt dokumentiert.</p><button className="button button-outline" type="button" onClick={() => setConsultationOpen(open => !open)}>Persönliche Beratung anfragen ↗</button></div>{consultationOpen && <form className="lead-form" onSubmit={requestConsultation}><div className="lead-heading"><h3>Persönliche Beratung</h3></div><div className="lead-fields"><label>Name<input name="name" required maxLength={100} autoComplete="name" /></label><label>Geschäftliche E-Mail<input name="email" type="email" required maxLength={254} autoComplete="email" /></label><label>Unternehmen<input name="company" required maxLength={150} autoComplete="organization" /></label></div><div className="honey" aria-hidden="true"><label>Website<input name="website" tabIndex={-1} autoComplete="off" /></label></div><label className="check-label"><input name="contactConsent" type="checkbox" required /> <span>Ich wünsche eine persönliche Beratung zu dieser Quality Diagnostic und stimme der Kontaktaufnahme per E-Mail zu. <a href="/datenschutz">Datenschutzhinweise</a></span></label><div className="lead-submit"><span>Die Diagnostic bleibt auch bei einer CRM-Prüfung sicher erhalten.</span><button className="button button-green" disabled={busy}>{busy ? 'Anfrage wird übermittelt …' : 'Beratung anfragen ↗'}</button></div>{consultationNotice && <p role="status" className="crm-notice">{consultationNotice}</p>}{correctionPath && <a className="button button-outline" href={correctionPath}>E-Mail-Adresse korrigieren</a>}</form>}</div>}
     </>}
     <div className="lab-trust"><span>◈ Keine vertraulichen Daten eingeben</span><span>◎ Hypothesen sind keine bestätigten Ursachen</span><span>↧ CRM nur nach separater Einwilligung</span></div>
   </section>;

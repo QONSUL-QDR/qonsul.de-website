@@ -2,6 +2,7 @@ import {CONTACT_PRIVACY_VERSION} from '@/lib/contact';
 import {syncContactLead,type ContactLead} from '@/lib/crm';
 import {sendContactSummary} from '@/lib/mail';
 import {hash,json,purgeExpired,rateLimit,rawDb,readBody,setting} from '@/lib/server';
+import {requiredCompany} from '@/lib/required-company';
 
 const value=(body:Record<string,unknown>,key:string,max:number,required=true)=>{
   const input=body[key];
@@ -15,8 +16,7 @@ export async function POST(request:Request){
     const body=await readBody(request);
     if(body.website)throw new Error('Anfrage abgelehnt.');
     if(body.privacyAcknowledged!==true||body.privacyVersion!==CONTACT_PRIVACY_VERSION)throw new Error('Bitte bestätigen Sie, dass Sie die Datenschutzhinweise gelesen haben.');
-    if(setting('PRODUCTION_READY')!=='true'&&body.demoConfirmed!==true)throw new Error('In der privaten Vorschau bitte nur fiktive Testdaten verwenden und dies bestätigen.');
-    const name=value(body,'name',100),email=value(body,'email',254).toLowerCase(),phone=value(body,'phone',50,false),company=value(body,'company',150,false),message=value(body,'message',2000);
+    const name=value(body,'name',100),email=value(body,'email',254).toLowerCase(),phone=value(body,'phone',50,false),company=requiredCompany(body.company),message=value(body,'message',2000);
     if(name.length<2)throw new Error('Bitte Ihren Namen angeben.');
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('Bitte eine gültige E-Mail-Adresse angeben.');
     if(message.length<10)throw new Error('Bitte beschreiben Sie Ihr Anliegen in mindestens 10 Zeichen.');
@@ -30,7 +30,7 @@ export async function POST(request:Request){
     const requestedMail=setting('PRODUCTION_READY')==='true'&&!!setting('RESEND_API_KEY')&&!!setting('CONTACT_FROM_EMAIL')&&!!setting('PUBLIC_CONTACT_EMAIL');
     const crmStatus=requestedCrm?'pending':'not_configured',emailStatus=requestedMail?'pending':'not_configured';
     const retention=Math.min(730,Math.max(30,Number(setting('CONTACT_RETENTION_DAYS'))||90));
-    await db.prepare('INSERT INTO contact_requests (id, client_token_hash, name, email, phone, company, message, privacy_version, created_at, expires_at, crm_status, email_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id,clientTokenHash,name,email,phone||null,company||null,message,CONTACT_PRIVACY_VERSION,now,now+retention*86400000,crmStatus,emailStatus).run();
+    await db.prepare('INSERT INTO contact_requests (id, client_token_hash, name, email, phone, company, message, privacy_version, created_at, expires_at, crm_status, email_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id,clientTokenHash,name,email,phone||null,company,message,CONTACT_PRIVACY_VERSION,now,now+retention*86400000,crmStatus,emailStatus).run();
     const lead:ContactLead={id,name,email,phone,company,message};
     const [finalCrm,finalMail]=await Promise.all([
       crmStatus==='pending'?syncContactLead(lead):Promise.resolve(crmStatus),

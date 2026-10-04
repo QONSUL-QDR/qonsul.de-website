@@ -86,8 +86,15 @@ await assert.rejects(()=>withSavingState(value=>timeoutStates.push(value),async(
 assert.deepEqual(timeoutStates,[true,false],'timeout ends saving state');
 
 const correctionToken='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,correction_token:correctionToken,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'pending_review',diagnostic_id:id,correction_token:correctionToken},{status:201})});
+let consultationPosts=0;
+const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,correction_token:correctionToken,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},company:{name:'Fiktives Testunternehmen'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
+  assert.equal(new URL(String(url)).pathname,'/api/v1/intake/diagnostic/consultation');
+  assert.deepEqual(JSON.parse(String(init?.body)).company,{name:'Fiktives Testunternehmen'});
+  consultationPosts++;
+  return Response.json({status:'pending_review',diagnostic_id:id,correction_token:correctionToken},{status:201});
+}});
 assert.deepEqual(consultation,{status:'pending_review',diagnosticId:id,correctionToken});
+assert.equal(consultationPosts,1,'the consultation sends the company once to Cockpit');
 let correctionSeen=false;
 const correction=await correctDiagnosticConsultationEmail({source_event_id:id,correction_token:correctionToken,new_correction_token:correctionToken,email:'neu@example.invalid'},{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   assert.equal(new URL(String(url)).pathname,'/api/v1/intake/diagnostic/consultation/email-correction');
@@ -202,7 +209,8 @@ assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses'/,'Public Dia
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\)/,'AI responses remain separate from the Cause Map until user selection');
 assert.match(diagnosticUi,/const \[completedAIRounds, setCompletedAIRounds\] = useState\(0\)/,'the AI round counter starts at zero for every new Diagnostic flow');
 assert.match(diagnosticUi,/const analysisRound: 1 \| 2 = completedAIRounds === 0 \? 1 : 2/,'the browser derives an explicit first or second analysis round without changing the UX');
-assert.match(diagnosticUi,/if \(!status\.ai\) return setNotice\('Die QONSUL-Analyse ist derzeit nicht verfügbar\./,'an unavailable intake is explained before either click can start generation');
+assert.doesNotMatch(diagnosticUi,/if \(!status\.ai\)/,'an unresolved advisory readiness request cannot discard the first AI click');
+assert.match(diagnosticUi,/result\.code === 'ai_intake_not_configured'\) return \{ status: 'failed', reason: 'unavailable' \}/,'the server still provides the unavailable result after a genuine failed start');
 assert.match(diagnosticUi,/const sourceEventId = crypto\.randomUUID\(\);/,'each accepted click creates a new source event ID rather than replaying a previous request');
 assert.match(diagnosticUi,/sourceEventId: id, analysisRound: round, problem, \.\.\.focused/,'the second round sends only its explicit focused snapshot');
 assert.match(diagnosticUi,/if \(round === 2\) \{[\s\S]*?setRoundTwoSuggestions\(result\.causes \|\| \[\]\);[\s\S]*?setCompletedAIRounds\(2\);[\s\S]*?activateAnalysisConversion\(\)/,'the second result is shown and closes further generation');
@@ -307,7 +315,8 @@ assert.ok(statusPollLimit>=5*pollsPerRun+60,'the status limit supports at least 
 assert.match(publicAiRoute,/rateLimit\(request, 'public-ai-hypotheses', 5\)/,'the generation endpoint keeps its strict independent limit');
 assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length validation must run before the Diagnostic flow starts');
 assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
-assert.match(diagnosticUi,/Ihre Anfrage ist eingegangen\. Wir haben Ihnen eine Bestätigungs-E-Mail gesendet\./);
+assert.match(diagnosticUi,/setConsultationNotice\('Ihre Anfrage ist eingegangen\.'\)/);
+assert.doesNotMatch(diagnosticUi,/Wir haben Ihnen eine Bestätigungs-E-Mail gesendet\./);
 assert.match(diagnosticUi,/E-Mail-Adresse korrigieren/);
 assert.match(diagnosticUi,/readConsultationCorrectionLink\(\)/,'the Diagnostic page validates local correction-link expiry when reading storage');
 assert.match(diagnosticUi,/Die Beratungsanfrage konnte nicht übermittelt werden\. Bitte versuchen Sie es erneut\./);
@@ -326,8 +335,10 @@ assert.match(correctionStorage,/stored\.expiresAt <= now[\s\S]*?localStorage\.re
 const analyticsClient=await readFile(new URL('../app/analytics-client.tsx',import.meta.url),'utf8');
 assert.match(analyticsClient,/current\.startsWith\('\/anfrage-verwalten\/'\) \? '\/anfrage-verwalten\/\[token\]'/,'correction tokens are redacted before analytics events are built');
 const privacyPage=await readFile(new URL('../app/datenschutz/page.tsx',import.meta.url),'utf8');
-assert.match(privacyPage,/technische Zustellereignisse/,'privacy notice explains provider delivery event processing');
-assert.match(privacyPage,/sieben Tage gültiger Korrektur-Link/,'privacy notice explains correction-link purpose and retention');
+const privacyText=await readFile(new URL('../docs/legal/QONSUL_Datenschutzhinweise_Veroeffentlichungsfassung_2026-10-04.md',import.meta.url),'utf8');
+assert.match(privacyPage,/QONSUL_Datenschutzhinweise_Veroeffentlichungsfassung_2026-10-04\.md\?raw/,'privacy page renders the supplied publication copy');
+assert.match(privacyText,/technische Zustellereignisse/,'privacy notice explains provider delivery event processing');
+assert.match(privacyText,/sieben Tage gültiger Korrektur-Link/,'privacy notice explains correction-link purpose and retention');
 const diagnosticCss=await readFile(new URL('../app/globals.css',import.meta.url),'utf8');
 assert.match(diagnosticCss,/\.analysis-exhausted\{/,'the conversion state has its own neutral visual treatment');
 assert.match(diagnosticCss,/\.boost-action-button\{font-family:Arial,'Segoe UI',sans-serif;font-size:12px;font-weight:600;line-height:1\.4;min-height:46px;padding:14px 22px\}/,'both neighbouring actions share height, typography, weight, and horizontal padding');
