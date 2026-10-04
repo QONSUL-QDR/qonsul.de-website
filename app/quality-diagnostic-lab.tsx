@@ -7,7 +7,7 @@ import { DIAGNOSTIC_PROCESSING_CONSENT_VERSION } from '@/lib/diagnostic-contract
 import { CONTACT_PRIVACY_VERSION } from '@/lib/contact';
 import { emitAnalyticsHook } from '@/lib/analytics-hooks';
 import { currentAnalyticsSessionId } from '@/lib/analytics-session';
-import { nextAIHypothesesPollingAction } from '@/lib/ai-polling';
+import { startAIHypothesesRun } from '@/lib/ai-polling';
 import { invalidateDraftSubmissionId, submissionIdForSave, withSavingState } from '@/lib/diagnostic-submission-lifecycle';
 import { readConsultationCorrectionLink, storeConsultationCorrectionLink } from '@/lib/consultation-correction-storage';
 
@@ -30,26 +30,31 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   const [selected, setSelected] = useState<Category>('Produkt'), [draft, setDraft] = useState(''), [availableData, setAvailableData] = useState<DataKind[]>([]);
   const [status, setStatus] = useState(initialStatus), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [saved, setSaved] = useState<DiagnosticResult | null>(null), [consultationOpen, setConsultationOpen] = useState(false), [consultationNotice, setConsultationNotice] = useState(''), [correctionPath, setCorrectionPath] = useState('');
-  const submissionId = useRef(''), consultationId = useRef(''), consultationCorrectionToken = useRef(''), aiRequestId = useRef(''), aiRequestInFlight = useRef(false), aiPollingTimer = useRef<ReturnType<typeof setTimeout> | null>(null), aiPollingDeadlineTimer = useRef<ReturnType<typeof setTimeout> | null>(null), aiPollingFlow = useRef(0), aiResultApplied = useRef(false), analysisProgressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), flowId = useRef(''), completedSteps = useRef(new Set<string>()), causeInput = useRef<HTMLInputElement>(null);
+  const submissionId = useRef(''), consultationId = useRef(''), consultationCorrectionToken = useRef(''), aiRequestInFlight = useRef(false), aiPollingRun = useRef<{ cancel: () => void } | null>(null), aiResultApplied = useRef(false), analysisProgressTimer = useRef<ReturnType<typeof setTimeout> | null>(null), flowId = useRef(''), completedSteps = useRef(new Set<string>()), causeInput = useRef<HTMLInputElement>(null);
   const analysis: Analysis = { problem, causes, availableData, mode: causes.some(c => c.source === 'ai') ? 'ai' : causes.some(c => c.source === 'rules') ? 'rules' : 'manual' };
   const userCount = causes.filter(cause => cause.source === 'user').length;
   const hypothesisCount = causes.length - userCount;
   const analysisBusy = analysisProgress !== 'idle';
 
-  function invalidateDraftSubmission() { submissionId.current = invalidateDraftSubmissionId(); aiRequestId.current = ''; }
+  function invalidateDraftSubmission() { submissionId.current = invalidateDraftSubmissionId(); }
 
   function stopAIPolling() {
-    aiPollingFlow.current += 1;
-    if (aiPollingTimer.current) clearTimeout(aiPollingTimer.current);
-    aiPollingTimer.current = null;
-    if (aiPollingDeadlineTimer.current) clearTimeout(aiPollingDeadlineTimer.current);
-    aiPollingDeadlineTimer.current = null;
+    aiPollingRun.current?.cancel();
+    aiPollingRun.current = null;
   }
 
   function resetAnalysisProgress() {
     if (analysisProgressTimer.current) clearTimeout(analysisProgressTimer.current);
     analysisProgressTimer.current = null;
     setAnalysisProgress('idle');
+  }
+
+  function cancelAIAnalysis() {
+    stopAIPolling();
+    resetAnalysisProgress();
+    aiRequestInFlight.current = false;
+    aiResultApplied.current = false;
+    setBusy(false);
   }
 
   function completeAnalysisProgress(afterComplete: () => void) {
@@ -62,10 +67,12 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     }, 320);
   }
 
-  function failAIAnalysis() {
-    resetAnalysisProgress();
-    stopAIPolling(); aiRequestInFlight.current = false; setBusy(false);
-    setError('Die QONSUL-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.');
+  function failAIAnalysis(reason: 'failed' | 'timeout' | 'unavailable') {
+    cancelAIAnalysis();
+    setNotice(reason === 'unavailable' ? 'Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.' : '');
+    setError(reason === 'timeout'
+      ? 'Die QONSUL-Analyse dauert länger als erwartet. Bitte starten Sie bei Bedarf einen neuen Durchlauf.'
+      : reason === 'unavailable' ? '' : 'Die QONSUL-Hypothesen konnten nicht ergänzt werden. Ihre eigene Analyse bleibt unverändert nutzbar.');
   }
 
   function activateAnalysisConversion() {
@@ -92,7 +99,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   function start(value = input) {
     const next = value.trim();
     if (next.length < 10) return setError('Bitte beschreiben Sie das Problem in mindestens 10 Zeichen.');
-    stopAIPolling(); resetAnalysisProgress(); flowId.current = crypto.randomUUID(); completedSteps.current.clear(); invalidateDraftSubmission(); consultationId.current = ''; consultationCorrectionToken.current = '';
+    cancelAIAnalysis(); flowId.current = crypto.randomUUID(); completedSteps.current.clear(); invalidateDraftSubmission(); consultationId.current = ''; consultationCorrectionToken.current = '';
     emitAnalyticsHook('diagnostic_started', { diagnosticFlowId: flowId.current }); step('problem', 1);
     setInput(next); setProblem(next); setCauses([]); setAiSuggestions([]); setAnalysisExhausted(false); setOpenConsultationAfterSave(false); setCompletedAIRounds(0); setBlindSpots([]); setAvailableData([]); setSaved(null); setConsultationOpen(false); setConsultationNotice(''); setCorrectionPath(''); setError('');
     setNotice('Ergänzen Sie Ihre Beobachtungen. Vorschläge bleiben prüfbare Hypothesen, bis Ihr Team sie mit Daten bestätigt.');
@@ -112,6 +119,10 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     event.preventDefault(); const text = draft.trim();
     if (text.length < 3) return;
     if (causes.filter(cause => cause.category === selected && cause.source === 'user').length >= 3) return setError('Pro Perspektive sind maximal drei eigene Beobachtungen möglich.');
+    if (aiRequestInFlight.current) {
+      cancelAIAnalysis();
+      setNotice('Die laufende QONSUL-Analyse wurde wegen der neuen Beobachtung beendet. Sie können einen neuen Durchlauf starten.');
+    }
     invalidateDraftSubmission(); step('causes', 2); setCauses(previous => [...previous, { id: crypto.randomUUID(), category: selected, text, source: 'user' }]); setAiSuggestions([]); setBlindSpots([]); setDraft(''); setSaved(null); setError('');
   }
   function addBlindspots() {
@@ -149,29 +160,42 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     setOpenConsultationAfterSave(true);
     document.getElementById('diagnostic-save')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
-  function beginAIPolling(sourceEventId: string) {
-    const pollingFlow = ++aiPollingFlow.current;
-    aiPollingDeadlineTimer.current = setTimeout(() => {
-      if (pollingFlow === aiPollingFlow.current && !aiResultApplied.current && nextAIHypothesesPollingAction({ kind: 'timeout' }) === 'fail') failAIAnalysis();
-    }, 90_000);
-    const poll = async () => {
-      if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
-      try {
-        const response = await fetch('/api/diagnostic-ai-hypotheses/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(12_000), body: JSON.stringify({ sourceEventId }) });
-        const result = await response.json() as { status?: 'processing' | 'completed' | 'failed' | 'not_found'; causes?: Cause[]; error?: string };
-        if (pollingFlow !== aiPollingFlow.current || aiResultApplied.current) return;
-        const action = nextAIHypothesesPollingAction({ kind: 'status', responseOk: response.ok, status: result.status, hasCauses: Boolean(result.causes) });
-        if (action === 'apply' && result.causes) return applyAIHypotheses({ causes: result.causes });
-        if (action === 'poll') {
-          aiPollingTimer.current = setTimeout(poll, 2_500);
-          return;
-        }
-        failAIAnalysis();
-      } catch { failAIAnalysis(); }
-    };
-    aiPollingTimer.current = setTimeout(poll, 3_000);
+  function beginAIPolling(sourceEventId: string, analysisRound: 1 | 2) {
+    aiPollingRun.current = startAIHypothesesRun<Cause>({
+      sourceEventId, analysisRound,
+      submit: async (id, round, signal) => {
+        const response = await fetch('/api/diagnostic-ai-hypotheses', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.any([signal, AbortSignal.timeout(45_000)]),
+          body: JSON.stringify({ sourceEventId: id, analysisRound: round, problem, causes: [...causes, ...aiSuggestions] }),
+        });
+        let result: { status?: 'processing'; causes?: Cause[]; notice?: string; code?: string };
+        try { result = await response.json() as typeof result; }
+        catch { return { status: 'failed' }; }
+        if (response.status === 202 && result.status === 'processing') return { status: 'processing' };
+        if (result.code === 'ai_intake_not_configured') return { status: 'failed', reason: 'unavailable' };
+        if (!response.ok || !Array.isArray(result.causes)) return { status: 'failed' };
+        return { status: 'completed', causes: result.causes, notice: result.notice };
+      },
+      poll: async (id, signal) => {
+        const response = await fetch('/api/diagnostic-ai-hypotheses/status', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
+          body: JSON.stringify({ sourceEventId: id }),
+        });
+        if (!response.ok) return { status: 'failed' };
+        let result: { status?: string; causes?: Cause[] };
+        try { result = await response.json() as typeof result; }
+        catch { return { status: 'failed' }; }
+        if (result.status === 'completed' && Array.isArray(result.causes)) return { status: 'completed', causes: result.causes };
+        if (result.status === 'processing' || result.status === 'not_found') return { status: result.status };
+        return { status: 'failed' };
+      },
+      onComplete: result => applyAIHypotheses(result),
+      onFail: failAIAnalysis,
+    });
   }
-  async function addAIHypotheses(regenerate = false) {
+  function addAIHypotheses(regenerate = false) {
     if (aiRequestInFlight.current || analysisExhausted) return;
     if (!status.ai) return setNotice('Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
     if (completedAIRounds >= 2) {
@@ -179,32 +203,15 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       return;
     }
     if (aiSuggestions.length > 0 && !regenerate) return setNotice('Die QONSUL-Analyse wurde gerade bereits ausgeführt. Bitte verwenden Sie die vorhandenen Vorschläge oder erstellen Sie später bewusst neue Vorschläge.');
-    if (regenerate) aiRequestId.current = '';
     const analysisRound: 1 | 2 = completedAIRounds === 0 ? 1 : 2;
     aiRequestInFlight.current = true;
     aiResultApplied.current = false;
     stopAIPolling();
     resetAnalysisProgress(); setAnalysisProgress('active');
     setError(''); setNotice('QONSUL Analyse läuft …');
-    if (!aiRequestId.current) aiRequestId.current = crypto.randomUUID();
-    const sourceEventId = aiRequestId.current;
+    const sourceEventId = crypto.randomUUID();
     setBusy(true);
-    beginAIPolling(sourceEventId);
-    try {
-      const response = await fetch('/api/diagnostic-ai-hypotheses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(45000), body: JSON.stringify({
-        sourceEventId, analysisRound, problem, causes: [...causes, ...aiSuggestions],
-      }) });
-      const result = await response.json() as { status?: 'processing'; causes?: Cause[]; error?: string; notice?: string; code?: string };
-      if (response.ok && result.status === 'processing') return;
-      if (result.code === 'ai_intake_not_configured') {
-        failAIAnalysis();
-        setError('');
-        setNotice('Die QONSUL-Analyse ist derzeit nicht verfügbar. Bitte versuchen Sie es später erneut.');
-        return;
-      }
-      if (!response.ok || !result.causes) return failAIAnalysis();
-      applyAIHypotheses(result);
-    } catch { /* Status polling resolves controlled provider failures and timeouts. */ }
+    beginAIPolling(sourceEventId, analysisRound);
   }
   function acceptAISuggestion(id: string) {
     const suggestion = aiSuggestions.find(item => item.id === id);
@@ -259,7 +266,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   return <section id="analyse" className="lab" aria-label="QONSUL Quality Diagnostic">
     <div className="lab-top"><div className="lab-title"><span className="lab-mark"><BrandMark /></span><div><strong>QONSUL Quality Diagnostic</strong><span>Vom Problem zu prüfbaren Hypothesen und einer belastbaren Datenbasis.</span></div></div><span className="pill"><span className="live-dot" /> Ohne Anmeldung starten</span></div>
     <div className="steps" aria-label="Diagnostic-Schritte"><span className="active"><b>{problem ? '✓' : '01'}</b> Problem beschreiben</span><i /><span className={problem ? 'active' : ''}><b>{causes.length ? '✓' : '02'}</b> Hypothesen strukturieren</span><i /><span className={saved ? 'active' : ''}><b>{saved ? '✓' : '03'}</b> Diagnostic sichern</span></div>
-    {!problem ? <div className="lab-entry"><div className="eyebrow">DAS PROBLEM IST DER ANFANG. NICHT DAS ENDE.</div><h2>Welches Qualitätsproblem möchten Sie verstehen?</h2><p>Beschreiben Sie eine Beobachtung aus Entwicklung, Validierung oder Produktion. Bitte keine vertraulichen Daten eingeben.</p><form noValidate onSubmit={event => { event.preventDefault(); start(); }}><div className="problem-input"><span aria-hidden="true">⌕</span><input value={input} onChange={event => { setInput(event.target.value); if (error) setError(''); }} minLength={10} maxLength={600} required aria-invalid={Boolean(error)} aria-describedby={error ? 'diagnostic-problem-error' : undefined} placeholder="z. B. Bauteile fallen bei der thermischen Validierung sporadisch aus." /><button className="button button-green">Diagnostic starten <span>↗</span></button></div>{error && <p id="diagnostic-problem-error" role="alert" className="error-message">{error}</p>}<div className="examples"><span>Zum Beispiel:</span>{examples.map(example => <button type="button" key={example} onClick={() => start(example)}>{example} <span>↗</span></button>)}</div></form></div> : <div className="active-problem"><div><span className="eyebrow">IHR QUALITÄTSPROBLEM</span><h2>{problem}</h2></div><button className="quiet-button" disabled={busy} onClick={() => { resetAnalysisProgress(); invalidateDraftSubmission(); consultationId.current = ''; consultationCorrectionToken.current = ''; flowId.current = ''; completedSteps.current.clear(); setProblem(''); setCauses([]); setAiSuggestions([]); setAnalysisExhausted(false); setOpenConsultationAfterSave(false); setCompletedAIRounds(0); setBlindSpots([]); setAvailableData([]); setSaved(null); setCorrectionPath(''); }}>Neu beginnen ↺</button></div>}
+    {!problem ? <div className="lab-entry"><div className="eyebrow">DAS PROBLEM IST DER ANFANG. NICHT DAS ENDE.</div><h2>Welches Qualitätsproblem möchten Sie verstehen?</h2><p>Beschreiben Sie eine Beobachtung aus Entwicklung, Validierung oder Produktion. Bitte keine vertraulichen Daten eingeben.</p><form noValidate onSubmit={event => { event.preventDefault(); start(); }}><div className="problem-input"><span aria-hidden="true">⌕</span><input value={input} onChange={event => { setInput(event.target.value); if (error) setError(''); }} minLength={10} maxLength={600} required aria-invalid={Boolean(error)} aria-describedby={error ? 'diagnostic-problem-error' : undefined} placeholder="z. B. Bauteile fallen bei der thermischen Validierung sporadisch aus." /><button className="button button-green">Diagnostic starten <span>↗</span></button></div>{error && <p id="diagnostic-problem-error" role="alert" className="error-message">{error}</p>}<div className="examples"><span>Zum Beispiel:</span>{examples.map(example => <button type="button" key={example} onClick={() => start(example)}>{example} <span>↗</span></button>)}</div></form></div> : <div className="active-problem"><div><span className="eyebrow">IHR QUALITÄTSPROBLEM</span><h2>{problem}</h2></div><button className="quiet-button" disabled={busy} onClick={() => { cancelAIAnalysis(); invalidateDraftSubmission(); consultationId.current = ''; consultationCorrectionToken.current = ''; flowId.current = ''; completedSteps.current.clear(); setProblem(''); setCauses([]); setAiSuggestions([]); setAnalysisExhausted(false); setOpenConsultationAfterSave(false); setCompletedAIRounds(0); setBlindSpots([]); setAvailableData([]); setSaved(null); setCorrectionPath(''); }}>Neu beginnen ↺</button></div>}
     {problem && <><div className="board-preview board-active">
       <div className="board-heading"><span><span className="live-dot" /> IHRE URSACHENLANDKARTE</span><span>{userCount} eigene · {hypothesisCount} ergänzte Hypothesen</span></div>
       <div className="fish-layout"><div className="fish-categories">
