@@ -30,6 +30,20 @@ const tagObject = 'c'.repeat(40);
 const artifactName = expectedArtifactName(tag, commit);
 const digest = `sha256:${'d'.repeat(64)}`;
 assertDeploymentInputs({ artifactName, tag, commit, tree, digest });
+for (const revisionTag of [
+  'website-production-candidate-2026-09-23-r2',
+  'website-production-candidate-2026-09-23-r10',
+]) assertDeploymentInputs({ artifactName: expectedArtifactName(revisionTag, commit), tag: revisionTag, commit, tree, digest });
+for (const invalidTag of [
+  'website-production-candidate-2026-9-23',
+  'website-production-candidate-2026-09-3',
+  'website-production-candidate-20260923',
+  'website-production-candidate-2026-09-23-r0',
+  'website-production-candidate-2026-09-23-r1',
+  'website-production-candidate-2026-09-23-r01',
+  'website-production-candidate-2026-09-23-r02',
+  'website-production-candidate-2026-09-23-r2x',
+]) assert.throws(() => assertDeploymentInputs({ artifactName: expectedArtifactName(invalidTag, commit), tag: invalidTag, commit, tree, digest }), invalidTag);
 assert.throws(() => assertDeploymentInputs({ artifactName: 'other', tag, commit, tree, digest }));
 assert.throws(() => assertDeploymentInputs({ artifactName, tag, commit, tree, digest: 'd'.repeat(64) }));
 

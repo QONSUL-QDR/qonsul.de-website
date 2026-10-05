@@ -5,7 +5,7 @@
 | Input | Required value |
 | --- | --- |
 | `artifact_name` | `production-candidate-<tag>-<commit>` |
-| `release_tag` | protected `website-production-candidate-YYYY-MM-DD` tag |
+| `release_tag` | protected `website-production-candidate-YYYY-MM-DD` tag or immutable revision `website-production-candidate-YYYY-MM-DD-rN` where `N >= 2` and has no leading zeros |
 | `expected_commit` | complete peeled Candidate commit SHA |
 | `expected_tree` | complete Candidate tree SHA |
 | `artifact_digest` | exact `sha256:<hex>` GitHub Artifact digest |

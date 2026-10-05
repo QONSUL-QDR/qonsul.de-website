@@ -13,7 +13,7 @@ The workflow file must live on the default branch (`main`) so GitHub can offer `
 
 | Input | Required value |
 | --- | --- |
-| `release_tag` | `website-production-candidate-*` |
+| `release_tag` | `website-production-candidate-YYYY-MM-DD` or immutable revision `website-production-candidate-YYYY-MM-DD-rN` where `N >= 2` and has no leading zeros |
 | `expected_commit` | full peeled commit SHA |
 | `expected_tree` | full tree SHA for that commit |
 | `ci_run_id` | successful GitHub CI run for that commit |
