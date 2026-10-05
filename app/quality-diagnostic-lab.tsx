@@ -185,6 +185,9 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
             ? { sourceEventId: id, analysisRound: round, problem, causes: [...causes, ...aiSuggestions] }
             : { sourceEventId: id, analysisRound: round, problem, ...focused }),
         });
+        // A gateway/server timeout does not prove that Cockpit rejected the start.
+        // Keep polling this run ID; never repeat the generation request automatically.
+        if (response.status === 408 || response.status >= 500) throw new Error('AI submission outcome is unknown');
         let result: { status?: 'processing'; causes?: Cause[]; notice?: string; code?: string };
         try { result = await response.json() as typeof result; }
         catch { return { status: 'failed' }; }
@@ -199,6 +202,9 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
           signal: AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
           body: JSON.stringify({ sourceEventId: id, analysisRound }),
         });
+        // Transient HTTP failures are as inconclusive as a fetch timeout. The run
+        // deadline still bounds retries; explicit failed/4xx results remain terminal.
+        if (response.status === 408 || response.status >= 500) throw new Error('AI status is temporarily unavailable');
         if (!response.ok) return { status: 'failed' };
         let result: { status?: string; causes?: Cause[] };
         try { result = await response.json() as typeof result; }
