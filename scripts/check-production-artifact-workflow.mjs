@@ -26,8 +26,27 @@ const tag = 'website-production-candidate-2026-09-20';
 const ciRunId = '35520678135';
 const ciWorkflow = { id: 42, path: '.github/workflows/ci.yml' };
 
-assertReleaseInputs({ tag, commit, tree, ciRunId });
-assert.throws(() => assertReleaseInputs({ tag: 'main', commit, tree, ciRunId }));
+for (const candidateTag of [
+  'website-production-candidate-2026-09-20',
+  'website-production-candidate-2026-09-20-r2',
+  'website-production-candidate-2026-09-20-r9',
+  'website-production-candidate-2026-09-20-r10',
+  'website-production-candidate-2026-09-20-r42',
+]) assertReleaseInputs({ tag: candidateTag, commit, tree, ciRunId });
+for (const invalidTag of [
+  'main',
+  'website-production-candidate-2026-9-20',
+  'website-production-candidate-2026-09-2',
+  'website-production-candidate-20260920',
+  'website-production-candidate-2026-09-20-r',
+  'website-production-candidate-2026-09-20-r0',
+  'website-production-candidate-2026-09-20-r1',
+  'website-production-candidate-2026-09-20-r00',
+  'website-production-candidate-2026-09-20-r01',
+  'website-production-candidate-2026-09-20-r02',
+  'website-production-candidate-2026-09-20-r2x',
+  'website-production-candidate-2026-09-20-rev2',
+]) assert.throws(() => assertReleaseInputs({ tag: invalidTag, commit, tree, ciRunId }), invalidTag);
 
 const parsed = parseAnnotatedTag(`object ${commit}\ntype commit\ntag ${tag}\ntagger Test <test@example.invalid> 0 +0000\n\nProduction candidate only — no deployment performed\n\nCommit: ${commit}\n\nTree: ${tree}\n\nCI-Run: ${ciRunId}\n`);
 assert.equal(parsed.object, commit);
