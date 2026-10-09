@@ -23,9 +23,11 @@ const buildId = `${PASS.commit}:${PASS.tree}`;
 const deployId = (runId) => `staging-gh-${runId}`;
 
 export function assertInputs(env = process.env) {
+  assert.equal(env.GITHUB_EVENT_NAME, 'workflow_dispatch', 'Only a manual dispatch may deploy.');
+  assert.equal(env.GITHUB_REF, 'refs/heads/main', 'The dispatch must target main.');
   assert.equal(env.QONSUL_COCKPIT_INTAKE_URL, PASS.cockpit, 'Staging intake URL differs from the pinned URL.');
   assert.match(env.STAGING_D1_DATABASE_ID || '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-  assert.match(env.STAGING_D1_DATABASE_NAME || '', /^[a-z0-9][a-z0-9-]*-staging$/);
+  assert.equal(env.STAGING_D1_DATABASE_NAME, 'qonsul-website-d1-staging-reconciliation', 'Staging D1 database name differs from the pinned name.');
   assert.match(env.GITHUB_RUN_ID || '', /^[1-9][0-9]*$/);
   assert.match(env.GITHUB_SHA || '', /^[0-9a-f]{40}$/);
   assert.equal(env.GITHUB_RUN_ATTEMPT, '1', 'A rerun cannot deploy this one-off release.');
