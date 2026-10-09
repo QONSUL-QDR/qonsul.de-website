@@ -22,12 +22,10 @@ jobs:
       STAGING_D1_DATABASE_ID: ${{ vars.STAGING_D1_DATABASE_ID }}
       STAGING_D1_DATABASE_NAME: ${{ vars.STAGING_D1_DATABASE_NAME }}
     steps:
-      - name: Require manual dispatch of the default-branch control
-        env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      - name: Require manual dispatch on main
         run: |
           test "${GITHUB_EVENT_NAME}" = 'workflow_dispatch'
-          test "${GITHUB_REF}" = "refs/heads/${DEFAULT_BRANCH}"
+          test "${GITHUB_REF}" = 'refs/heads/main'
           test "${GITHUB_RUN_ATTEMPT}" = '1'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
