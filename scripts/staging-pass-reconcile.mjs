@@ -74,6 +74,7 @@ async function filesUnder(root) {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const absolute = path.join(dir, entry.name);
       const relative = path.relative(root, absolute).split(path.sep).join('/');
+      assert.ok(relative.split('/').every((part) => !part.startsWith('.')), `Hidden artifact entry: ${relative}`);
       const stat = await lstat(absolute);
       if (stat.isDirectory()) await walk(absolute);
       else {
@@ -87,6 +88,32 @@ async function filesUnder(root) {
   entries.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   assert.ok(entries.length > 0);
   return entries;
+}
+
+export async function sealPayload(sourceDist, artifactRoot, env = process.env) {
+  assertInputs(env);
+  await mkdir(artifactRoot);
+  await cp(sourceDist, path.join(artifactRoot, 'dist'), {
+    recursive: true, force: false, errorOnExist: true,
+    // upload-artifact excludes hidden paths by default; copy only that uploadable payload.
+    filter: (entry) => {
+      const relative = path.relative(sourceDist, entry);
+      return relative === '' || relative.split(path.sep).every((part) => !part.startsWith('.'));
+    },
+  });
+  const files = await filesUnder(path.join(artifactRoot, 'dist'));
+  const digest = sha256(JSON.stringify(files));
+  const manifest = {
+    schemaVersion: 1,
+    source: { repository: 'QONSUL-QDR/qonsul.de-website', commit: PASS.commit, tree: PASS.tree },
+    artifact: { name: `website-staging-pass-${env.GITHUB_RUN_ID}`, sha256: digest, files },
+    workflow: { runId: env.GITHUB_RUN_ID, controlCommit: env.GITHUB_SHA },
+    deployment: { id: deployId(env.GITHUB_RUN_ID), worker: PASS.worker, site: PASS.site, cockpitUrl: PASS.cockpit },
+  };
+  await writeFile(path.join(artifactRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  if (env.GITHUB_OUTPUT) await appendFile(env.GITHUB_OUTPUT, `payload_sha256=${digest}\n`);
+  console.log(`PASS artifact ${manifest.artifact.name} sha256:${digest} deploy_id=${manifest.deployment.id}`);
+  return manifest;
 }
 
 async function prepare() {
@@ -106,36 +133,26 @@ async function prepare() {
   config.secrets = { required: [PASS.secretName] };
   assertWorkerConfig(config);
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
-  await mkdir(ARTIFACT);
-  await cp(path.join(SOURCE, 'dist'), path.join(ARTIFACT, 'dist'), { recursive: true, force: false, errorOnExist: true });
-  const files = await filesUnder(path.join(ARTIFACT, 'dist'));
-  const digest = sha256(JSON.stringify(files));
-  const manifest = {
-    schemaVersion: 1,
-    source: { repository: 'QONSUL-QDR/qonsul.de-website', commit: PASS.commit, tree: PASS.tree },
-    artifact: { name: `website-staging-pass-${process.env.GITHUB_RUN_ID}`, sha256: digest, files },
-    workflow: { runId: process.env.GITHUB_RUN_ID, controlCommit: process.env.GITHUB_SHA },
-    deployment: { id: deployId(process.env.GITHUB_RUN_ID), worker: PASS.worker, site: PASS.site, cockpitUrl: PASS.cockpit },
-  };
-  await writeFile(path.join(ARTIFACT, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `payload_sha256=${digest}\n`);
-  console.log(`PASS artifact ${manifest.artifact.name} sha256:${digest} deploy_id=${manifest.deployment.id}`);
+  await sealPayload(path.join(SOURCE, 'dist'), ARTIFACT);
 }
 
-async function verify() {
-  assertInputs();
-  const manifest = JSON.parse(await readFile(path.join(ARTIFACT, 'manifest.json'), 'utf8'));
+export async function verifyPayload(artifactRoot = ARTIFACT, env = process.env) {
+  assertInputs(env);
+  assert.deepEqual((await readdir(artifactRoot)).sort(), ['dist', 'manifest.json']);
+  assert.ok((await lstat(path.join(artifactRoot, 'dist'))).isDirectory());
+  assert.ok((await lstat(path.join(artifactRoot, 'manifest.json'))).isFile());
+  const manifest = JSON.parse(await readFile(path.join(artifactRoot, 'manifest.json'), 'utf8'));
   assert.equal(manifest.schemaVersion, 1);
   assert.deepEqual(manifest.source, { repository: 'QONSUL-QDR/qonsul.de-website', commit: PASS.commit, tree: PASS.tree });
-  assert.equal(manifest.artifact.name, `website-staging-pass-${process.env.GITHUB_RUN_ID}`);
-  assert.deepEqual(manifest.workflow, { runId: process.env.GITHUB_RUN_ID, controlCommit: process.env.GITHUB_SHA });
-  assert.deepEqual(manifest.deployment, { id: deployId(process.env.GITHUB_RUN_ID), worker: PASS.worker, site: PASS.site, cockpitUrl: PASS.cockpit });
-  const files = await filesUnder(path.join(ARTIFACT, 'dist'));
+  assert.equal(manifest.artifact.name, `website-staging-pass-${env.GITHUB_RUN_ID}`);
+  assert.deepEqual(manifest.workflow, { runId: env.GITHUB_RUN_ID, controlCommit: env.GITHUB_SHA });
+  assert.deepEqual(manifest.deployment, { id: deployId(env.GITHUB_RUN_ID), worker: PASS.worker, site: PASS.site, cockpitUrl: PASS.cockpit });
+  const files = await filesUnder(path.join(artifactRoot, 'dist'));
   assert.deepEqual(files, manifest.artifact.files);
   assert.equal(sha256(JSON.stringify(files)), manifest.artifact.sha256);
-  if (process.env.EXPECTED_PAYLOAD_SHA256) assert.equal(manifest.artifact.sha256, process.env.EXPECTED_PAYLOAD_SHA256);
-  const config = JSON.parse(await readFile(path.join(ARTIFACT, 'dist/server/wrangler.json'), 'utf8'));
-  assertWorkerConfig(config);
+  if (env.EXPECTED_PAYLOAD_SHA256) assert.equal(manifest.artifact.sha256, env.EXPECTED_PAYLOAD_SHA256);
+  const config = JSON.parse(await readFile(path.join(artifactRoot, 'dist/server/wrangler.json'), 'utf8'));
+  assertWorkerConfig(config, env);
   console.log(`PASS artifact sha256:${manifest.artifact.sha256} source=${PASS.commit} tree=${PASS.tree}`);
 }
 
@@ -195,7 +212,7 @@ async function postDeployStatus() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const commands = { inputs: () => assertInputs(), source: () => assertSource(), prepare, verify, remote: remotePreflight, status: postDeployStatus };
+  const commands = { inputs: () => assertInputs(), source: () => assertSource(), prepare, verify: verifyPayload, remote: remotePreflight, status: postDeployStatus };
   const command = commands[process.argv[2]];
   if (!command) throw new Error('Expected a fixed staging reconciliation command.');
   await command();
