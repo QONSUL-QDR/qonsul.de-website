@@ -46,6 +46,7 @@ export function assertSource(source = SOURCE) {
 }
 
 const runtimeVars = Object.freeze({
+  DEPLOYMENT_ENVIRONMENT: 'staging',
   QONSUL_COCKPIT_INTAKE_URL: PASS.cockpit,
   PUBLIC_SITE_URL: PASS.site,
   PRODUCTION_READY: 'false',
@@ -59,6 +60,7 @@ export function assertWorkerConfig(config, env = process.env) {
   assert.ok(!config.env && !config.dispatch_namespaces?.length);
   assert.ok(!config.triggers || Object.keys(config.triggers).length === 0);
   assert.deepEqual(config.vars, runtimeVars);
+  assert.deepEqual(config.observability, { enabled: true, redact_query_string: false });
   assert.deepEqual(config.secrets, { required: [PASS.secretName] });
   assert.equal(config.main, 'index.js');
   assert.ok(config.assets?.directory);
@@ -66,6 +68,43 @@ export function assertWorkerConfig(config, env = process.env) {
   assert.equal(config.d1_databases[0].binding, 'DB');
   assert.equal(config.d1_databases[0].database_id, env.STAGING_D1_DATABASE_ID);
   assert.equal(config.d1_databases[0].database_name, env.STAGING_D1_DATABASE_NAME);
+}
+
+export function stageWorkerConfig(config, env = process.env) {
+  assert.deepEqual(config.vars, {}, 'Historical build unexpectedly includes runtime vars.');
+  assert.ok(!config.route && !config.routes && !config.domain && !config.domains);
+  assert.equal(config.d1_databases?.length, 1);
+  assert.equal(config.d1_databases[0].binding, 'DB');
+  assert.equal(config.d1_databases[0].database_id, env.STAGING_D1_DATABASE_ID);
+  assert.equal(config.d1_databases[0].database_name, env.STAGING_D1_DATABASE_NAME);
+  assert.deepEqual(config.observability, { enabled: true });
+  const staged = structuredClone(config);
+  staged.name = PASS.worker;
+  staged.workers_dev = true;
+  staged.vars = runtimeVars;
+  staged.observability.redact_query_string = false;
+  staged.secrets = { required: [PASS.secretName] };
+  assertWorkerConfig(staged, env);
+  return staged;
+}
+
+export function assertRemoteStagingConfig(config, bindings, scriptSettings, env = process.env) {
+  assertWorkerConfig(config, env);
+  assert.ok(Array.isArray(bindings));
+  assert.deepEqual(bindings.filter((binding) => binding.type === 'plain_text').map((binding) => binding.name).sort(), Object.keys(config.vars).sort());
+  assert.deepEqual(bindings.filter((binding) => binding.type === 'd1').map((binding) => binding.name), ['DB']);
+  for (const [name, value] of Object.entries(config.vars)) {
+    const matches = bindings.filter((binding) => binding.name === name);
+    assert.equal(matches.length, 1, `Staging binding ${name} is missing or duplicated.`);
+    assert.equal(matches[0].type, 'plain_text');
+    assert.equal(matches[0].text, value, `Staging binding ${name} differs from the sealed payload.`);
+  }
+  const d1 = bindings.filter((binding) => binding.name === 'DB');
+  assert.equal(d1.length, 1);
+  assert.equal(d1[0].type, 'd1');
+  assert.equal(d1[0].database_id, config.d1_databases[0].database_id);
+  assert.equal(scriptSettings.observability?.enabled, config.observability.enabled);
+  assert.equal(scriptSettings.observability?.redact_query_string, config.observability.redact_query_string);
 }
 
 async function filesUnder(root) {
@@ -120,18 +159,7 @@ async function prepare() {
   assertInputs();
   assertSource();
   const configPath = path.join(SOURCE, 'dist/server/wrangler.json');
-  const config = JSON.parse(await readFile(configPath, 'utf8'));
-  assert.deepEqual(config.vars, {}, 'Historical build unexpectedly includes runtime vars.');
-  assert.ok(!config.route && !config.routes && !config.domain && !config.domains);
-  assert.equal(config.d1_databases?.length, 1);
-  assert.equal(config.d1_databases[0].binding, 'DB');
-  assert.equal(config.d1_databases[0].database_id, process.env.STAGING_D1_DATABASE_ID);
-  assert.equal(config.d1_databases[0].database_name, process.env.STAGING_D1_DATABASE_NAME);
-  config.name = PASS.worker;
-  config.workers_dev = true;
-  config.vars = runtimeVars;
-  config.secrets = { required: [PASS.secretName] };
-  assertWorkerConfig(config);
+  const config = stageWorkerConfig(JSON.parse(await readFile(configPath, 'utf8')));
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
   await sealPayload(path.join(SOURCE, 'dist'), ARTIFACT);
 }
@@ -184,16 +212,9 @@ async function remotePreflight() {
   assert.equal(status.commit, PASS.previousCommit, 'Staging Worker is no longer at the expected predecessor.');
   assert.equal(status.tree, PASS.previousTree, 'Staging Worker tree has changed.');
   const settings = await cloudflare('/settings');
-  const bindings = settings.bindings;
-  assert.ok(Array.isArray(bindings));
-  const url = bindings.filter((binding) => binding.name === 'QONSUL_COCKPIT_INTAKE_URL');
-  assert.equal(url.length, 1);
-  assert.equal(url[0].type, 'plain_text');
-  assert.equal(url[0].text, PASS.cockpit, 'Staging Worker intake binding is not the pinned URL.');
-  const d1 = bindings.filter((binding) => binding.name === 'DB');
-  assert.equal(d1.length, 1);
-  assert.equal(d1[0].type, 'd1');
-  assert.equal(d1[0].database_id, process.env.STAGING_D1_DATABASE_ID);
+  const scriptSettings = await cloudflare('/script-settings');
+  const config = JSON.parse(await readFile(path.join(ARTIFACT, 'dist/server/wrangler.json'), 'utf8'));
+  assertRemoteStagingConfig(config, settings.bindings, scriptSettings);
   const secret = await cloudflare(`/secrets/${PASS.secretName}`);
   assert.equal(secret?.name, PASS.secretName);
   assert.equal(secret?.type, 'secret_text');

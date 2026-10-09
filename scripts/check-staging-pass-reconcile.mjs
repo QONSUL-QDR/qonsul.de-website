@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PASS, assertInputs, assertWorkerConfig, sealPayload, verifyPayload } from './staging-pass-reconcile.mjs';
+import { PASS, assertInputs, assertRemoteStagingConfig, assertWorkerConfig, sealPayload, stageWorkerConfig, verifyPayload } from './staging-pass-reconcile.mjs';
 
 assert.equal(PASS.commit, '70464ab0210b43c2e6d71bf980d08a3a01121e33');
 assert.equal(PASS.tree, '9cb9e824a5e3c4082d595194dd59d4f083753bff');
@@ -48,11 +48,13 @@ const config = {
   main: 'index.js',
   assets: { directory: '../client' },
   vars: {
+    DEPLOYMENT_ENVIRONMENT: 'staging',
     QONSUL_COCKPIT_INTAKE_URL: PASS.cockpit,
     PUBLIC_SITE_URL: PASS.site,
     PRODUCTION_READY: 'false',
     NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT: `${PASS.cockpit}/api/v1/analytics/events`,
   },
+  observability: { enabled: true, redact_query_string: false },
   secrets: { required: [PASS.secretName] },
   d1_databases: [{ binding: 'DB', database_id: good.STAGING_D1_DATABASE_ID, database_name: good.STAGING_D1_DATABASE_NAME }],
 };
@@ -60,7 +62,23 @@ assertWorkerConfig(config, good);
 assert.throws(() => assertWorkerConfig({ ...config, name: 'wrong-worker' }, good));
 assert.throws(() => assertWorkerConfig({ ...config, routes: ['unapproved.example.invalid/*'] }, good));
 assert.throws(() => assertWorkerConfig({ ...config, vars: { ...config.vars, QONSUL_COCKPIT_INTAKE_URL: 'https://other.example.invalid' } }, good));
+assert.throws(() => assertWorkerConfig({ ...config, vars: { ...config.vars, DEPLOYMENT_ENVIRONMENT: 'other' } }, good));
+assert.throws(() => assertWorkerConfig({ ...config, observability: { enabled: true } }, good));
 assert.throws(() => assertWorkerConfig({ ...config, secrets: { required: [] } }, good));
+
+const historicalConfig = { ...config, name: 'historical-build', vars: {}, observability: { enabled: true }, secrets: undefined };
+assert.deepEqual(stageWorkerConfig(historicalConfig, good), config);
+const remoteBindings = [
+  ...Object.entries(config.vars).map(([name, text]) => ({ name, type: 'plain_text', text })),
+  { name: 'DB', type: 'd1', database_id: good.STAGING_D1_DATABASE_ID },
+];
+const remoteScriptSettings = { observability: { enabled: true, redact_query_string: false } };
+assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, good);
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.filter((binding) => binding.name !== 'DEPLOYMENT_ENVIRONMENT'), remoteScriptSettings, good));
+assert.throws(() => assertRemoteStagingConfig(config, [...remoteBindings, { name: 'UNEXPECTED_REMOTE_VAR', type: 'plain_text', text: 'unexpected' }], remoteScriptSettings, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.map((binding) => binding.name === 'PUBLIC_SITE_URL' ? { ...binding, text: 'https://other.example.invalid' } : binding), remoteScriptSettings, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, { observability: { enabled: true, redact_query_string: true } }, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.map((binding) => binding.name === 'DB' ? { ...binding, database_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' } : binding), remoteScriptSettings, good));
 
 const fixture = await mkdtemp(path.join(tmpdir(), 'qonsul-staging-payload-'));
 const sourceDist = path.join(fixture, 'source', 'dist');
@@ -90,4 +108,4 @@ execFileSync('tar', ['-xf', archive, '-C', extraRoot]);
 await writeFile(path.join(extraRoot, 'dist', 'client', 'extra.txt'), 'unexpected payload file');
 await assert.rejects(() => verifyPayload(extraRoot, good));
 
-console.log('PASS one-off Staging pins and artifact archive roundtrip, including tamper and extra-file rejection');
+console.log('PASS one-off Staging pins, strict remote settings, and artifact archive roundtrip');
