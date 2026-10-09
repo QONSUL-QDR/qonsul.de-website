@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { PASS, assertInputs, assertWorkerConfig } from './staging-pass-reconcile.mjs';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { PASS, assertInputs, assertWorkerConfig, sealPayload, verifyPayload } from './staging-pass-reconcile.mjs';
 
 assert.equal(PASS.commit, '70464ab0210b43c2e6d71bf980d08a3a01121e33');
 assert.equal(PASS.tree, '9cb9e824a5e3c4082d595194dd59d4f083753bff');
@@ -58,4 +62,32 @@ assert.throws(() => assertWorkerConfig({ ...config, routes: ['unapproved.example
 assert.throws(() => assertWorkerConfig({ ...config, vars: { ...config.vars, QONSUL_COCKPIT_INTAKE_URL: 'https://other.example.invalid' } }, good));
 assert.throws(() => assertWorkerConfig({ ...config, secrets: { required: [] } }, good));
 
-console.log('PASS one-off Staging workflow pins source, target, runtime URL, secret name, and single dispatch');
+const fixture = await mkdtemp(path.join(tmpdir(), 'qonsul-staging-payload-'));
+const sourceDist = path.join(fixture, 'source', 'dist');
+const artifactRoot = path.join(fixture, 'upload');
+const downloadedRoot = path.join(fixture, 'download');
+await mkdir(path.join(sourceDist, '.openai', 'drizzle'), { recursive: true });
+await mkdir(path.join(sourceDist, 'client'), { recursive: true });
+await mkdir(path.join(sourceDist, 'server'), { recursive: true });
+await writeFile(path.join(sourceDist, '.openai', 'drizzle', 'snapshot.sql'), 'synthetic source-only file');
+await writeFile(path.join(sourceDist, 'client', 'index.html'), '<p>synthetic staging payload</p>');
+await writeFile(path.join(sourceDist, 'server', 'index.js'), 'export default {};');
+await writeFile(path.join(sourceDist, 'server', 'wrangler.json'), JSON.stringify(config));
+
+const manifest = await sealPayload(sourceDist, artifactRoot, good);
+assert.deepEqual(manifest.artifact.files.map((file) => file.path), ['client/index.html', 'server/index.js', 'server/wrangler.json']);
+const archive = path.join(fixture, 'payload.tar');
+execFileSync('tar', ['-cf', archive, '-C', artifactRoot, '.']);
+await mkdir(downloadedRoot);
+execFileSync('tar', ['-xf', archive, '-C', downloadedRoot]);
+await verifyPayload(downloadedRoot, { ...good, EXPECTED_PAYLOAD_SHA256: manifest.artifact.sha256 });
+
+await writeFile(path.join(downloadedRoot, 'dist', 'client', 'index.html'), 'tampered payload');
+await assert.rejects(() => verifyPayload(downloadedRoot, good));
+const extraRoot = path.join(fixture, 'download-extra');
+await mkdir(extraRoot);
+execFileSync('tar', ['-xf', archive, '-C', extraRoot]);
+await writeFile(path.join(extraRoot, 'dist', 'client', 'extra.txt'), 'unexpected payload file');
+await assert.rejects(() => verifyPayload(extraRoot, good));
+
+console.log('PASS one-off Staging pins and artifact archive roundtrip, including tamper and extra-file rejection');
