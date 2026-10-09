@@ -14,7 +14,13 @@ export const PASS = Object.freeze({
   site: 'https://qonsul-website-staging-reconciliation.qonsul.workers.dev',
   cockpit: 'https://cockpit-staging.qonsul.de',
   secretName: 'QONSUL_COCKPIT_INTAKE_SECRET',
+  d1DatabaseId: 'fb630d44-5d0d-46ae-9f63-bced28916e8e',
+  d1DatabaseName: 'qonsul-website-d1-staging-reconciliation',
+  compatibilityDate: '2026-08-28',
+  compatibilityFlags: Object.freeze(['nodejs_compat']),
 });
+
+export const ALLOWED_CONFIG_CHANGES = Object.freeze(['assets', 'd1_databases']);
 
 const SOURCE = path.resolve('source');
 const ARTIFACT = path.resolve('staging-pass-artifact');
@@ -26,8 +32,8 @@ export function assertInputs(env = process.env) {
   assert.equal(env.GITHUB_EVENT_NAME, 'workflow_dispatch', 'Only a manual dispatch may deploy.');
   assert.equal(env.GITHUB_REF, 'refs/heads/main', 'The dispatch must target main.');
   assert.equal(env.QONSUL_COCKPIT_INTAKE_URL, PASS.cockpit, 'Staging intake URL differs from the pinned URL.');
-  assert.match(env.STAGING_D1_DATABASE_ID || '', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
-  assert.equal(env.STAGING_D1_DATABASE_NAME, 'qonsul-website-d1-staging-reconciliation', 'Staging D1 database name differs from the pinned name.');
+  assert.equal(env.STAGING_D1_DATABASE_ID, PASS.d1DatabaseId, 'Staging D1 database ID differs from the pinned ID.');
+  assert.equal(env.STAGING_D1_DATABASE_NAME, PASS.d1DatabaseName, 'Staging D1 database name differs from the pinned name.');
   assert.match(env.GITHUB_RUN_ID || '', /^[1-9][0-9]*$/);
   assert.match(env.GITHUB_SHA || '', /^[0-9a-f]{40}$/);
   assert.equal(env.GITHUB_RUN_ATTEMPT, '1', 'A rerun cannot deploy this one-off release.');
@@ -63,9 +69,14 @@ export function assertWorkerConfig(config, env = process.env) {
   assert.deepEqual(config.observability, { enabled: true, redact_query_string: false });
   assert.deepEqual(config.secrets, { required: [PASS.secretName] });
   assert.equal(config.main, 'index.js');
-  assert.ok(config.assets?.directory);
+  assert.deepEqual(Object.keys(config.assets ?? {}), ['directory']);
+  assert.ok(config.assets.directory);
+  assert.equal(config.compatibility_date, PASS.compatibilityDate);
+  assert.deepEqual(config.compatibility_flags, PASS.compatibilityFlags);
   assert.equal(config.d1_databases?.length, 1);
   assert.equal(config.d1_databases[0].binding, 'DB');
+  assert.equal(config.d1_databases[0].database_id, PASS.d1DatabaseId);
+  assert.equal(config.d1_databases[0].database_name, PASS.d1DatabaseName);
   assert.equal(config.d1_databases[0].database_id, env.STAGING_D1_DATABASE_ID);
   assert.equal(config.d1_databases[0].database_name, env.STAGING_D1_DATABASE_NAME);
 }
@@ -88,9 +99,17 @@ export function stageWorkerConfig(config, env = process.env) {
   return staged;
 }
 
-export function assertRemoteStagingConfig(config, bindings, scriptSettings, env = process.env) {
+export function assertRemoteStagingConfig(config, bindings, scriptSettings, topology, env = process.env) {
+  // Wrangler's remote model omits the local assets directory and the D1 name/
+  // migrations directory. Those produce the two allowlisted conflicts. Every
+  // other setting Wrangler compares is required to match below.
   assertWorkerConfig(config, env);
   assert.ok(Array.isArray(bindings));
+  assert.deepEqual(
+    bindings.map((binding) => `${binding.name}:${binding.type}`).sort(),
+    [...Object.keys(config.vars).map((name) => `${name}:plain_text`), `DB:d1`, `${PASS.secretName}:secret_text`].sort(),
+    'Staging has an unexpected, missing, or changed binding.',
+  );
   assert.deepEqual(bindings.filter((binding) => binding.type === 'plain_text').map((binding) => binding.name).sort(), Object.keys(config.vars).sort());
   assert.deepEqual(bindings.filter((binding) => binding.type === 'd1').map((binding) => binding.name), ['DB']);
   for (const [name, value] of Object.entries(config.vars)) {
@@ -102,9 +121,26 @@ export function assertRemoteStagingConfig(config, bindings, scriptSettings, env 
   const d1 = bindings.filter((binding) => binding.name === 'DB');
   assert.equal(d1.length, 1);
   assert.equal(d1[0].type, 'd1');
+  assert.equal(d1[0].database_id, PASS.d1DatabaseId);
   assert.equal(d1[0].database_id, config.d1_databases[0].database_id);
+  const secrets = bindings.filter((binding) => binding.name === PASS.secretName);
+  assert.equal(secrets.length, 1);
+  assert.equal(secrets[0].type, 'secret_text');
+  assert.ok(!Object.hasOwn(secrets[0], 'text'), 'Secret metadata unexpectedly contained a value.');
+  assert.equal(scriptSettings.compatibility_date, config.compatibility_date);
+  assert.deepEqual(scriptSettings.compatibility_flags ?? [], config.compatibility_flags ?? []);
+  assert.deepEqual(scriptSettings.tail_consumers ?? [], config.tail_consumers ?? []);
+  assert.deepEqual(scriptSettings.limits ?? {}, config.limits ?? {});
+  assert.deepEqual(scriptSettings.placement ?? {}, config.placement ?? {});
   assert.equal(scriptSettings.observability?.enabled, config.observability.enabled);
   assert.equal(scriptSettings.observability?.redact_query_string, config.observability.redact_query_string);
+  assert.equal(topology.serviceName, PASS.worker);
+  assert.equal(topology.site, PASS.site);
+  assert.equal(topology.workersDevEnabled, true);
+  assert.equal(topology.previewUrlsEnabled, true);
+  assert.deepEqual(topology.routes, []);
+  assert.deepEqual(topology.customDomains, []);
+  assert.deepEqual(topology.schedules, []);
 }
 
 async function filesUnder(root) {
@@ -187,7 +223,7 @@ export async function verifyPayload(artifactRoot = ARTIFACT, env = process.env) 
 async function cloudflare(pathSuffix) {
   assert.match(process.env.STAGING_CLOUDFLARE_ACCOUNT_ID || '', /^[0-9a-f]{32}$/i);
   assert.ok(process.env.CLOUDFLARE_API_TOKEN, 'Staging Cloudflare token is unavailable.');
-  const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.STAGING_CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${PASS.worker}`;
+  const base = `https://api.cloudflare.com/client/v4/accounts/${process.env.STAGING_CLOUDFLARE_ACCOUNT_ID}`;
   const response = await fetch(`${base}${pathSuffix}`, {
     headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
     redirect: 'error', signal: AbortSignal.timeout(15000),
@@ -196,6 +232,59 @@ async function cloudflare(pathSuffix) {
   const payload = await response.json();
   assert.equal(payload.success, true, 'Staging Worker metadata was rejected.');
   return payload.result;
+}
+
+const workerApi = (pathSuffix) => cloudflare(`/workers/scripts/${PASS.worker}${pathSuffix}`);
+
+async function readRemoteStagingConfig() {
+  const service = await cloudflare(`/workers/services/${PASS.worker}`);
+  assert.equal(service.id, PASS.worker, 'Cloudflare returned a different Worker service.');
+  const environment = service.default_environment?.environment;
+  const remoteScript = service.default_environment?.script;
+  assert.ok(environment, 'The fixed Staging Worker has no default environment.');
+  assert.ok(remoteScript, 'The fixed Staging Worker has no active script metadata.');
+  const encodedEnvironment = encodeURIComponent(environment);
+  const serviceEnvironment = `/workers/services/${PASS.worker}/environments/${encodedEnvironment}`;
+  const [settings, scriptSettings, routes, customDomains, subdomain, cronTriggers, accountSubdomain] = await Promise.all([
+    workerApi('/settings'),
+    workerApi('/script-settings'),
+    cloudflare(`${serviceEnvironment}/routes?show_zonename=true`),
+    cloudflare(`/workers/domains/records?page=0&per_page=5&service=${PASS.worker}&environment=${encodedEnvironment}`),
+    cloudflare(`${serviceEnvironment}/subdomain`),
+    workerApi('/schedules'),
+    cloudflare('/workers/subdomain'),
+  ]);
+  const topology = {
+    serviceName: service.id,
+    site: `https://${PASS.worker}.${accountSubdomain.subdomain}.workers.dev`,
+    workersDevEnabled: subdomain.enabled,
+    previewUrlsEnabled: subdomain.previews_enabled,
+    routes,
+    customDomains,
+    schedules: cronTriggers.schedules,
+  };
+  const conflictSettings = {
+    compatibility_date: remoteScript.compatibility_date,
+    compatibility_flags: remoteScript.compatibility_flags,
+    tail_consumers: remoteScript.tail_consumers,
+    limits: remoteScript.limits,
+    placement: remoteScript.placement_mode ? { mode: remoteScript.placement_mode } : undefined,
+    observability: remoteScript.observability,
+  };
+  return { settings, scriptSettings, conflictSettings, topology };
+}
+
+async function assertRemoteBindings() {
+  const config = JSON.parse(await readFile(path.join(ARTIFACT, 'dist/server/wrangler.json'), 'utf8'));
+  const { settings, scriptSettings, conflictSettings, topology } = await readRemoteStagingConfig();
+  assertRemoteStagingConfig(config, settings.bindings, conflictSettings, topology);
+  assert.equal(scriptSettings.observability?.enabled, config.observability.enabled);
+  assert.equal(scriptSettings.observability?.redact_query_string, config.observability.redact_query_string);
+  const secret = await workerApi(`/secrets/${PASS.secretName}`);
+  assert.equal(secret?.name, PASS.secretName);
+  assert.equal(secret?.type, 'secret_text');
+  assert.ok(!Object.hasOwn(secret, 'text'), 'Secret metadata unexpectedly contained a value.');
+  return config;
 }
 
 async function readStatus() {
@@ -211,29 +300,24 @@ async function remotePreflight() {
   assert.equal(status.environment, 'staging');
   assert.equal(status.commit, PASS.previousCommit, 'Staging Worker is no longer at the expected predecessor.');
   assert.equal(status.tree, PASS.previousTree, 'Staging Worker tree has changed.');
-  const settings = await cloudflare('/settings');
-  const scriptSettings = await cloudflare('/script-settings');
-  const config = JSON.parse(await readFile(path.join(ARTIFACT, 'dist/server/wrangler.json'), 'utf8'));
-  assertRemoteStagingConfig(config, settings.bindings, scriptSettings);
-  const secret = await cloudflare(`/secrets/${PASS.secretName}`);
-  assert.equal(secret?.name, PASS.secretName);
-  assert.equal(secret?.type, 'secret_text');
-  assert.ok(!Object.hasOwn(secret, 'text'), 'Secret metadata unexpectedly contained a value.');
-  console.log(`PASS existing staging binding ${PASS.cockpit}; ${PASS.secretName}=present; D1=matched`);
+  await assertRemoteBindings();
+  console.log(`PASS read-only Staging preflight; allowed Wrangler config changes=${ALLOWED_CONFIG_CHANGES.join(',')}`);
 }
 
-async function postDeployStatus() {
+async function postDeploy() {
   assertInputs();
+  await assertRemoteBindings();
   const status = await readStatus();
   assert.equal(status.candidateIdentity?.commit, PASS.commit);
   assert.equal(status.candidateIdentity?.buildId, buildId);
+  assert.equal(status.candidateIdentity?.buildId?.split(':')[1], PASS.tree);
   assert.equal(status.ai, true);
   assert.equal(status.diagnosticReady, true);
-  console.log(`PASS staging status commit=${PASS.commit} tree=${PASS.tree} deploy_id=${deployId(process.env.GITHUB_RUN_ID)}`);
+  console.log(`PASS Staging bindings and status commit=${PASS.commit} tree=${PASS.tree} deploy_id=${deployId(process.env.GITHUB_RUN_ID)}`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const commands = { inputs: () => assertInputs(), source: () => assertSource(), prepare, verify: verifyPayload, remote: remotePreflight, status: postDeployStatus };
+  const commands = { inputs: () => assertInputs(), source: () => assertSource(), prepare, verify: verifyPayload, remote: remotePreflight, post: postDeploy };
   const command = commands[process.argv[2]];
   if (!command) throw new Error('Expected a fixed staging reconciliation command.');
   await command();

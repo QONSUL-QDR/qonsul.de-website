@@ -14,8 +14,8 @@ non-secret variables:
 | --- | --- |
 | `QONSUL_COCKPIT_INTAKE_URL` | Exactly `https://cockpit-staging.qonsul.de` |
 | `STAGING_CLOUDFLARE_ACCOUNT_ID` | Account containing the existing Staging Worker |
-| `STAGING_D1_DATABASE_ID` | Existing Staging D1 binding ID |
-| `STAGING_D1_DATABASE_NAME` | Existing D1 name ending in `-staging` |
+| `STAGING_D1_DATABASE_ID` | Exactly `fb630d44-5d0d-46ae-9f63-bced28916e8e` |
+| `STAGING_D1_DATABASE_NAME` | Exactly `qonsul-website-d1-staging-reconciliation` |
 
 It must contain the GitHub Environment secret
 `STAGING_CLOUDFLARE_API_TOKEN`, scoped in Cloudflare to this existing Worker.
@@ -25,16 +25,22 @@ job nor the uploaded artifact receives its value.
 
 The preflight reads only the fixed Staging Worker settings and status. It
 requires the current Staging commit and tree to be the known predecessor,
-compares the existing intake URL and D1 binding, and checks the secret name.
+compares the Worker name, workers.dev URL, intake URL, D1 binding, routes,
+custom domains, schedules, compatibility settings and observability, and
+checks the secret name without reading its value. The only configuration
+differences allowed through the preflight are `assets` and `d1_databases`.
 The build adds the exact Staging URL to the generated Worker configuration.
-Wrangler uses `--keep-vars` to retain other existing runtime variables and
-preserves existing secrets. No migration is run.
+After that allowlist passes, Wrangler deploys once without `--strict` and uses
+`--keep-vars` to retain existing runtime variables and secrets. It does not use
+`--force`, change routes or triggers, write secrets or variables, or run a
+migration.
 
 The manifest contains source commit/tree, content digest, workflow run ID,
 control commit, fixed target, and a run-derived deploy ID. After deployment,
-the workflow checks HTTP 200 and the historical `/api/status`
-`candidateIdentity.commit` and `candidateIdentity.buildId` values. It also
-requires `ai` and `diagnosticReady` to be true. A rerun of the same workflow
+the workflow checks the same remote bindings again, then requires HTTP 200
+from `/api/status` plus the historical `candidateIdentity.commit`
+and `candidateIdentity.buildId` values. It also requires `ai` and
+`diagnosticReady` to be true. A rerun of the same workflow
 run fails, and a new dispatch after a successful roll-forward fails the
 predecessor check.
 
