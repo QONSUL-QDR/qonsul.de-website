@@ -1,0 +1,141 @@
+name: Deploy one-off PASS website to staging
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qonsul-website-staging-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: website-staging-deployment
+    outputs:
+      payload_sha256: ${{ steps.prepare.outputs.payload_sha256 }}
+    env:
+      QONSUL_COCKPIT_INTAKE_URL: ${{ vars.QONSUL_COCKPIT_INTAKE_URL }}
+      STAGING_D1_DATABASE_ID: ${{ vars.STAGING_D1_DATABASE_ID }}
+      STAGING_D1_DATABASE_NAME: ${{ vars.STAGING_D1_DATABASE_NAME }}
+    steps:
+      - name: Require manual dispatch of the default-branch control
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          test "${GITHUB_EVENT_NAME}" = 'workflow_dispatch'
+          test "${GITHUB_REF}" = "refs/heads/${DEFAULT_BRANCH}"
+          test "${GITHUB_RUN_ATTEMPT}" = '1'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Check fixed Staging inputs before source fetch
+        run: |
+          node scripts/check-staging-pass-reconcile.mjs
+          node scripts/staging-pass-reconcile.mjs inputs
+      - name: Fetch only the fixed historical source object
+        run: |
+          git init source
+          git -C source remote add origin https://github.com/QONSUL-QDR/qonsul.de-website.git
+          git -C source fetch --no-tags --depth=1 origin 70464ab0210b43c2e6d71bf980d08a3a01121e33
+          git -C source checkout --detach FETCH_HEAD
+          node scripts/staging-pass-reconcile.mjs source
+      - name: Install and verify historical source without runtime credentials
+        working-directory: source
+        run: |
+          corepack pnpm install --frozen-lockfile --ignore-scripts
+          corepack pnpm typecheck
+          corepack pnpm test
+          corepack pnpm lint
+      - name: Build the exact historical source for Staging
+        working-directory: source
+        env:
+          CF_D1_DATABASE_ID: ${{ vars.STAGING_D1_DATABASE_ID }}
+          CF_D1_DATABASE_NAME: ${{ vars.STAGING_D1_DATABASE_NAME }}
+          SOURCE_COMMIT_SHA: 70464ab0210b43c2e6d71bf980d08a3a01121e33
+          SOURCE_BUILD_ID: 70464ab0210b43c2e6d71bf980d08a3a01121e33:9cb9e824a5e3c4082d595194dd59d4f083753bff
+          PUBLIC_SITE_URL: https://qonsul-website-staging-reconciliation.qonsul.workers.dev
+          NEXT_PUBLIC_QONSUL_ANALYTICS_ENDPOINT: https://cockpit-staging.qonsul.de/api/v1/analytics/events
+        run: corepack pnpm build
+      - name: Verify source again and seal the Staging payload
+        id: prepare
+        run: |
+          node scripts/staging-pass-reconcile.mjs source
+          node scripts/staging-pass-reconcile.mjs prepare
+          node scripts/staging-pass-reconcile.mjs verify
+      - name: Upload immutable Staging payload and manifest
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: website-staging-pass-${{ github.run_id }}
+          path: staging-pass-artifact/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record artifact provenance
+        env:
+          PAYLOAD_SHA256: ${{ steps.prepare.outputs.payload_sha256 }}
+          GITHUB_ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+          GITHUB_ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+        run: |
+          echo "Staging payload SHA-256: ${PAYLOAD_SHA256}" >> "$GITHUB_STEP_SUMMARY"
+          echo "GitHub Artifact ID: ${GITHUB_ARTIFACT_ID}" >> "$GITHUB_STEP_SUMMARY"
+          echo "GitHub Artifact digest: ${GITHUB_ARTIFACT_DIGEST}" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: website-staging-deployment
+    env:
+      QONSUL_COCKPIT_INTAKE_URL: ${{ vars.QONSUL_COCKPIT_INTAKE_URL }}
+      STAGING_D1_DATABASE_ID: ${{ vars.STAGING_D1_DATABASE_ID }}
+      STAGING_D1_DATABASE_NAME: ${{ vars.STAGING_D1_DATABASE_NAME }}
+      STAGING_CLOUDFLARE_ACCOUNT_ID: ${{ vars.STAGING_CLOUDFLARE_ACCOUNT_ID }}
+      EXPECTED_PAYLOAD_SHA256: ${{ needs.build.outputs.payload_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          run_install: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: website-staging-pass-${{ github.run_id }}
+          path: staging-pass-artifact/
+      - name: Verify downloaded payload
+        run: node scripts/staging-pass-reconcile.mjs verify
+      - name: Verify existing Staging bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
+        run: node scripts/staging-pass-reconcile.mjs remote
+      - name: Deploy once to the fixed Staging Worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.STAGING_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
+        run: >-
+          corepack pnpm dlx --package wrangler@4.127.1 wrangler deploy
+          --config staging-pass-artifact/dist/server/wrangler.json
+          --name qonsul-website-staging-reconciliation
+          --keep-vars --strict --tag staging-gh-${{ github.run_id }}
+      - name: Verify historical status contract on Staging
+        run: node scripts/staging-pass-reconcile.mjs status
+      - name: Record deployment identity
+        run: |
+          echo "Staging Worker: qonsul-website-staging-reconciliation" >> "$GITHUB_STEP_SUMMARY"
+          echo "Staging deploy ID: staging-gh-${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: 70464ab0210b43c2e6d71bf980d08a3a01121e33" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source tree: 9cb9e824a5e3c4082d595194dd59d4f083753bff" >> "$GITHUB_STEP_SUMMARY"
