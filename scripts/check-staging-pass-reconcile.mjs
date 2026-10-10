@@ -4,12 +4,14 @@ import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PASS, assertInputs, assertRemoteStagingConfig, assertWorkerConfig, sealPayload, stageWorkerConfig, verifyPayload } from './staging-pass-reconcile.mjs';
+import { ALLOWED_CONFIG_CHANGES, PASS, assertInputs, assertRemoteStagingConfig, assertWorkerConfig, sealPayload, stageWorkerConfig, verifyPayload } from './staging-pass-reconcile.mjs';
 
 assert.equal(PASS.commit, '70464ab0210b43c2e6d71bf980d08a3a01121e33');
 assert.equal(PASS.tree, '9cb9e824a5e3c4082d595194dd59d4f083753bff');
 assert.equal(PASS.worker, 'qonsul-website-staging-reconciliation');
 assert.equal(PASS.cockpit, 'https://cockpit-staging.qonsul.de');
+assert.equal(PASS.d1DatabaseId, 'fb630d44-5d0d-46ae-9f63-bced28916e8e');
+assert.deepEqual(ALLOWED_CONFIG_CHANGES, ['assets', 'd1_databases']);
 
 const workflow = readFileSync(new URL('../.github/workflows/deploy-oneoff-pass-staging.yml', import.meta.url), 'utf8');
 assert.match(workflow, /^  workflow_dispatch:\s*$/m);
@@ -21,16 +23,20 @@ assert.match(workflow, /concurrency:[\s\S]*qonsul-website-staging-reconciliation
 assert.match(workflow, new RegExp(`fetch --no-tags --depth=1 origin ${PASS.commit}`));
 assert.match(workflow, /staging-pass-reconcile\.mjs source[\s\S]*corepack pnpm build/);
 assert.match(workflow, /staging-pass-reconcile\.mjs remote[\s\S]*wrangler deploy/);
-assert.match(workflow, /--keep-vars --strict --tag staging-gh-/);
+assert.match(workflow, /--keep-vars --tag staging-gh-/);
+assert.doesNotMatch(workflow, /--strict|--force/);
+assert.doesNotMatch(workflow, /--routes?|--triggers?|wrangler (?:secret|d1)|PRODUCTION_CLOUDFLARE|qonsul-website-production/i);
 assert.match(workflow, new RegExp(`--name ${PASS.worker}`));
-assert.match(workflow, /node scripts\/staging-pass-reconcile\.mjs status/);
+assert.match(workflow, /node scripts\/staging-pass-reconcile\.mjs post/);
+assert.equal(workflow.match(/wrangler deploy/g)?.length, 1);
+assert.doesNotMatch(workflow, /https:\/\/qonsul\.de(?:\/|\s|$)/);
 
 const good = {
   GITHUB_EVENT_NAME: 'workflow_dispatch',
   GITHUB_REF: 'refs/heads/main',
   QONSUL_COCKPIT_INTAKE_URL: PASS.cockpit,
-  STAGING_D1_DATABASE_ID: '11111111-2222-4333-8444-555555555555',
-  STAGING_D1_DATABASE_NAME: 'qonsul-website-d1-staging-reconciliation',
+  STAGING_D1_DATABASE_ID: PASS.d1DatabaseId,
+  STAGING_D1_DATABASE_NAME: PASS.d1DatabaseName,
   GITHUB_RUN_ID: '12345',
   GITHUB_RUN_ATTEMPT: '1',
   GITHUB_SHA: 'a'.repeat(40),
@@ -39,12 +45,15 @@ assertInputs(good);
 assert.throws(() => assertInputs({ ...good, GITHUB_EVENT_NAME: 'push' }));
 assert.throws(() => assertInputs({ ...good, GITHUB_REF: 'refs/heads/other' }));
 assert.throws(() => assertInputs({ ...good, STAGING_D1_DATABASE_NAME: 'qonsul-website-d1-staging' }));
+assert.throws(() => assertInputs({ ...good, STAGING_D1_DATABASE_ID: '11111111-2222-4333-8444-555555555555' }));
 assert.throws(() => assertInputs({ ...good, QONSUL_COCKPIT_INTAKE_URL: 'https://other.example.invalid' }));
 assert.throws(() => assertInputs({ ...good, GITHUB_RUN_ATTEMPT: '2' }));
 
 const config = {
   name: PASS.worker,
   workers_dev: true,
+  compatibility_date: PASS.compatibilityDate,
+  compatibility_flags: [...PASS.compatibilityFlags],
   main: 'index.js',
   assets: { directory: '../client' },
   vars: {
@@ -71,14 +80,34 @@ assert.deepEqual(stageWorkerConfig(historicalConfig, good), config);
 const remoteBindings = [
   ...Object.entries(config.vars).map(([name, text]) => ({ name, type: 'plain_text', text })),
   { name: 'DB', type: 'd1', database_id: good.STAGING_D1_DATABASE_ID },
+  { name: PASS.secretName, type: 'secret_text' },
 ];
-const remoteScriptSettings = { observability: { enabled: true, redact_query_string: false } };
-assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, good);
-assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.filter((binding) => binding.name !== 'DEPLOYMENT_ENVIRONMENT'), remoteScriptSettings, good));
-assert.throws(() => assertRemoteStagingConfig(config, [...remoteBindings, { name: 'UNEXPECTED_REMOTE_VAR', type: 'plain_text', text: 'unexpected' }], remoteScriptSettings, good));
-assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.map((binding) => binding.name === 'PUBLIC_SITE_URL' ? { ...binding, text: 'https://other.example.invalid' } : binding), remoteScriptSettings, good));
-assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, { observability: { enabled: true, redact_query_string: true } }, good));
-assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.map((binding) => binding.name === 'DB' ? { ...binding, database_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' } : binding), remoteScriptSettings, good));
+const remoteScriptSettings = {
+  compatibility_date: '2026-08-28',
+  compatibility_flags: ['nodejs_compat'],
+  observability: { enabled: true, redact_query_string: false },
+};
+const remoteTopology = {
+  serviceName: PASS.worker,
+  site: PASS.site,
+  workersDevEnabled: true,
+  previewUrlsEnabled: true,
+  routes: [],
+  customDomains: [],
+  schedules: [],
+};
+assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, remoteTopology, good);
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.filter((binding) => binding.name !== 'DEPLOYMENT_ENVIRONMENT'), remoteScriptSettings, remoteTopology, good));
+assert.throws(() => assertRemoteStagingConfig(config, [...remoteBindings, { name: 'UNEXPECTED_REMOTE_VAR', type: 'plain_text', text: 'unexpected' }], remoteScriptSettings, remoteTopology, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.map((binding) => binding.name === 'PUBLIC_SITE_URL' ? { ...binding, text: 'https://other.example.invalid' } : binding), remoteScriptSettings, remoteTopology, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, { ...remoteScriptSettings, observability: { enabled: true, redact_query_string: true } }, remoteTopology, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings.map((binding) => binding.name === 'DB' ? { ...binding, database_id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' } : binding), remoteScriptSettings, remoteTopology, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, { ...remoteTopology, routes: [{ pattern: 'example.invalid/*' }] }, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, { ...remoteTopology, customDomains: [{ hostname: 'example.invalid' }] }, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, { ...remoteTopology, schedules: [{ cron: '* * * * *' }] }, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, { ...remoteTopology, site: 'https://other.workers.dev' }, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, remoteScriptSettings, { ...remoteTopology, previewUrlsEnabled: false }, good));
+assert.throws(() => assertRemoteStagingConfig(config, remoteBindings, { ...remoteScriptSettings, compatibility_date: '2026-09-01' }, remoteTopology, good));
 
 const fixture = await mkdtemp(path.join(tmpdir(), 'qonsul-staging-payload-'));
 const sourceDist = path.join(fixture, 'source', 'dist');
@@ -108,4 +137,4 @@ execFileSync('tar', ['-xf', archive, '-C', extraRoot]);
 await writeFile(path.join(extraRoot, 'dist', 'client', 'extra.txt'), 'unexpected payload file');
 await assert.rejects(() => verifyPayload(extraRoot, good));
 
-console.log('PASS one-off Staging pins, strict remote settings, and artifact archive roundtrip');
+console.log('PASS one-off Staging pins, allowlisted remote settings, and artifact archive roundtrip');

@@ -128,9 +128,11 @@ jobs:
           corepack pnpm dlx --package wrangler@4.127.1 wrangler deploy
           --config staging-pass-artifact/dist/server/wrangler.json
           --name qonsul-website-staging-reconciliation
-          --keep-vars --strict --tag staging-gh-${{ github.run_id }}
-      - name: Verify historical status contract on Staging
-        run: node scripts/staging-pass-reconcile.mjs status
+          --keep-vars --tag staging-gh-${{ github.run_id }}
+      - name: Verify Staging bindings and historical status contract
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_API_TOKEN }}
+        run: node scripts/staging-pass-reconcile.mjs post
       - name: Record deployment identity
         run: |
           echo "Staging Worker: qonsul-website-staging-reconciliation" >> "$GITHUB_STEP_SUMMARY"
