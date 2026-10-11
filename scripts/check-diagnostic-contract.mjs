@@ -7,6 +7,7 @@ import {requestPublicAIHypotheses,requestPublicAIHypothesesStatus,PublicAIIntake
 import {nextAIHypothesesPollingAction} from '../lib/ai-polling.ts';
 import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
 import {suggestBlindSpots} from '../lib/analysis.ts';
+import {supplementalHypothesesForSave} from '../lib/public-ai-rounds.ts';
 import {isCockpitIntakeConfigured} from '../lib/cockpit-intake-config.ts';
 import {diagnosticFailure} from '../lib/diagnostic-response.ts';
 import {LocalDatabaseUnavailableError} from '../lib/runtime-errors.ts';
@@ -30,6 +31,14 @@ assert.equal(event.hypotheses.length,1);
 assert.match(event.hypotheses[0].title,/Prüfhypothese/);
 assert.equal(JSON.stringify(event).includes('contact'),false);
 assert.equal(JSON.stringify(event).includes('company'),false);
+
+const roundOneForSave=Array.from({length:11},(_,index)=>({id:`round-one-${index}`,category:'Prozess',text:`Synthetische Round-1-Hypothese ${index + 1}`,source:'ai',check:`Round-1-Prüfschritt ${index + 1}`}));
+const roundTwoForSave=Array.from({length:6},(_,index)=>({id:`round-two-${index}`,category:'Prozess',text:`Synthetische Round-2-Vertiefung ${index + 1}`,source:'ai',originRef:`round-one-${index}`,mechanism:`Synthetischer Mechanismus ${index + 1}`,check:`Synthetischer Prüfschritt ${index + 1}`}));
+const persistedAnalysis={...analysis,causes:[analysis.causes[0],roundOneForSave[0]],supplementalHypotheses:supplementalHypothesesForSave([analysis.causes[0],roundOneForSave[0]],roundOneForSave,roundTwoForSave,Object.fromEntries(roundOneForSave.map(hypothesis=>[hypothesis.id,hypothesis.text])))};
+const persistedEvent=diagnosticEvent('33333333-3333-4333-8333-333333333333',persistedAnalysis);
+assert.equal(persistedEvent.hypotheses.length,17,'eleven remaining Round-1 hypotheses and six Round-2 enrichments are stored together');
+assert.equal(persistedEvent.hypotheses.filter(hypothesis=>hypothesis.title.startsWith('Vertiefung:')).length,6,'every Round-2 enrichment remains visibly marked');
+assert.match(persistedEvent.hypotheses.find(hypothesis=>hypothesis.title.startsWith('Vertiefung:'))?.description||'',/Vertiefung zu: Synthetische Round-1-Hypothese 1\nKausaler Mechanismus: Synthetischer Mechanismus 1\nPrüfschritt: Synthetischer Prüfschritt 1/,'every Round-2 enrichment retains its origin, mechanism, and check');
 
 const browserBlindspots={...analysis,causes:[
   analysis.causes[0],
@@ -226,6 +235,8 @@ assert.match(diagnosticUi,/setAiSuggestions\(accepted\)/,'AI responses are stage
 assert.doesNotMatch(diagnosticUi,/setCauses\(previous => \[\.\.\.previous, \.\.\.accepted\]\)/,'AI suggestions must not be inserted into the Cause Map automatically');
 assert.match(diagnosticUi,/function acceptAISuggestion/,'each AI suggestion requires an explicit accept action');
 assert.match(diagnosticUi,/function dismissAISuggestion/,'each AI suggestion can be dismissed without changing the Cause Map');
+assert.match(diagnosticUi,/function dismissAISuggestion\(id: string\) \{[\s\S]*?setRoundOneHypotheses\(previous => previous\.filter\(item => item\.id !== id\)\)/,'a dismissed Round-1 suggestion cannot be persisted later');
+assert.match(diagnosticUi,/cause\.source !== 'user'\) setRoundOneHypotheses\(previous => previous\.filter\(item => item\.id !== cause\.id\)\)/,'a removed accepted Round-1 suggestion cannot be persisted later');
 const blindSpotHandler=diagnosticUi.match(/function addBlindspots\(\) \{[\s\S]*?\n  \}\n  function applyAIHypotheses/)?.[0]||'';
 assert.match(blindSpotHandler,/const uncovered = suggestBlindSpots\(problem, causes\);\s+setBlindSpots\(uncovered\.length \? uncovered : suggestBlindSpots\(problem\)\);/,'blind spots remain available before and after every AI round, even when every category already has a hypothesis');
 assert.doesNotMatch(blindSpotHandler,/setCompletedAIRounds|setAnalysisExhausted|setCauses/,'blind spots never advance AI rounds, activate conversion, or create causes');

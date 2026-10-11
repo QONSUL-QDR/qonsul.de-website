@@ -8,7 +8,7 @@ import { CONTACT_PRIVACY_VERSION } from '@/lib/contact';
 import { emitAnalyticsHook } from '@/lib/analytics-hooks';
 import { currentAnalyticsSessionId } from '@/lib/analytics-session';
 import { startAIHypothesesRun } from '@/lib/ai-polling';
-import { focusedRoundRequest } from '@/lib/public-ai-rounds';
+import { focusedRoundRequest, supplementalHypothesesForSave } from '@/lib/public-ai-rounds';
 import { invalidateDraftSubmissionId, submissionIdForSave, withSavingState } from '@/lib/diagnostic-submission-lifecycle';
 import { readConsultationCorrectionLink, storeConsultationCorrectionLink } from '@/lib/consultation-correction-storage';
 import { requiredCompany } from '@/lib/required-company';
@@ -250,7 +250,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
     setNotice('Die Auswahl bestimmt nur die Vertiefung; sie bestätigt keine Ursache.');
   }
   function dismissAISuggestion(id: string) {
-    setAiSuggestions(previous => previous.filter(item => item.id !== id));
+    setAiSuggestions(previous => previous.filter(item => item.id !== id)); setRoundOneHypotheses(previous => previous.filter(item => item.id !== id));
     setSelectedFocusIds(previous => previous.filter(item => item !== id));
     setNotice('QONSUL-Hypothese verworfen. Ihre eigene Analyse bleibt unverändert nutzbar.');
   }
@@ -264,8 +264,9 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
       try {
         submissionId.current = submissionIdForSave(submissionId.current, () => crypto.randomUUID());
         const form = new FormData(event.currentTarget);
+        const analysisForSave: Analysis = { ...analysis, supplementalHypotheses: supplementalHypothesesForSave(causes, roundOneHypotheses, roundTwoSuggestions, focusLabels) };
         const response = await fetch('/api/diagnostics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(25000), body: JSON.stringify({
-          submissionId: submissionId.current, analysis, diagnosticConsent: form.get('diagnosticConsent') === 'on', consentVersion: DIAGNOSTIC_PROCESSING_CONSENT_VERSION,
+          submissionId: submissionId.current, analysis: analysisForSave, diagnosticConsent: form.get('diagnosticConsent') === 'on', consentVersion: DIAGNOSTIC_PROCESSING_CONSENT_VERSION,
           demoConfirmed: form.get('demoConfirmed') === 'on', website: form.get('website'), analyticsSessionId: currentAnalyticsSessionId(),
         }) });
         const result = await response.json() as { diagnostic?: DiagnosticResult; retryWithNewSubmissionId?: boolean };
@@ -307,7 +308,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
         <svg className="fish-lines" viewBox="0 0 900 400" preserveAspectRatio="none" aria-hidden="true"><path d="M0 200 H940 M110 20 L230 200 L110 380 M390 20 L510 200 L390 380 M670 20 L790 200 L670 380" fill="none" stroke="var(--diagram-line)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" /></svg>
         {CATEGORIES.map((category, index) => <div className={`cause-category ${selected === category ? 'selected' : ''}`} key={category}>
           <button type="button" className="category-title" disabled={busy} onClick={() => { setSelected(category); causeInput.current?.focus(); }}><span className="category-number">0{index + 1}</span><strong>{category}</strong><span className="category-count">{causes.filter(cause => cause.category === category).length}</span></button>
-          <ul className="cause-list">{causes.filter(cause => cause.category === category).map(cause => <li className={`cause cause-${cause.source}`} key={cause.id}><details><summary><span className="cause-source">{cause.source === 'user' ? '●' : '◇'}</span>{cause.text}</summary><div className="cause-details"><span>{cause.source === 'user' ? 'Eigene Beobachtung' : cause.source === 'ai' ? 'QONSUL-Hypothese · von Ihnen übernommen · gezielt prüfen' : 'Ergänzende Hypothese · gezielt prüfen'}</span>{cause.check && <p>{cause.check}</p>}{completedAIRounds === 1 && (cause.source === 'user' || cause.source === 'ai') && <label className="focus-choice"><input type="checkbox" disabled={busy} checked={selectedFocusIds.includes(cause.id)} onChange={() => toggleFocus(cause.id)} /> Für Vertiefung auswählen</label>}{cause.data && cause.data.length > 0 && <p className="required-data"><b>Benötigte Daten:</b> {cause.data.join(' · ')}</p>}<button type="button" className="quiet-button" disabled={busy} aria-label={`Eintrag aus ${category} entfernen`} onClick={() => { invalidateDraftSubmission(); setCauses(previous => previous.filter(item => item.id !== cause.id)); setSelectedFocusIds(previous => previous.filter(item => item !== cause.id)); if (completedAIRounds === 0) setAiSuggestions([]); setBlindSpots([]); setSaved(null); }}>Entfernen</button></div></details></li>)}</ul>
+          <ul className="cause-list">{causes.filter(cause => cause.category === category).map(cause => <li className={`cause cause-${cause.source}`} key={cause.id}><details><summary><span className="cause-source">{cause.source === 'user' ? '●' : '◇'}</span>{cause.text}</summary><div className="cause-details"><span>{cause.source === 'user' ? 'Eigene Beobachtung' : cause.source === 'ai' ? 'QONSUL-Hypothese · von Ihnen übernommen · gezielt prüfen' : 'Ergänzende Hypothese · gezielt prüfen'}</span>{cause.check && <p>{cause.check}</p>}{completedAIRounds === 1 && (cause.source === 'user' || cause.source === 'ai') && <label className="focus-choice"><input type="checkbox" disabled={busy} checked={selectedFocusIds.includes(cause.id)} onChange={() => toggleFocus(cause.id)} /> Für Vertiefung auswählen</label>}{cause.data && cause.data.length > 0 && <p className="required-data"><b>Benötigte Daten:</b> {cause.data.join(' · ')}</p>}<button type="button" className="quiet-button" disabled={busy} aria-label={`Eintrag aus ${category} entfernen`} onClick={() => { invalidateDraftSubmission(); setCauses(previous => previous.filter(item => item.id !== cause.id)); setSelectedFocusIds(previous => previous.filter(item => item !== cause.id)); if (cause.source !== 'user') setRoundOneHypotheses(previous => previous.filter(item => item.id !== cause.id)); if (completedAIRounds === 0) setAiSuggestions([]); setBlindSpots([]); setSaved(null); }}>Entfernen</button></div></details></li>)}</ul>
           <button type="button" className="add-cause" disabled={busy || causes.filter(cause => cause.category === category && cause.source === 'user').length >= 3} onClick={() => { setSelected(category); causeInput.current?.focus(); }}>+ Eigene Ursache</button>
         </div>)}
       </div><div className="fish-problem"><span>AUSGANGSPUNKT</span><strong>{problem}</strong><small>Hier beginnt die Veränderung.</small></div></div>

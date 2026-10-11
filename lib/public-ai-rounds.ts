@@ -1,4 +1,4 @@
-import { CATEGORIES, type Cause } from './analysis.ts';
+import { CATEGORIES, type Cause, type SupplementalHypothesis } from './analysis.ts';
 import type { PublicAIHypothesis } from './public-ai-intake-client.ts';
 
 export type FocusCause = {
@@ -77,4 +77,32 @@ export function publicHypothesesAsCauses(hypotheses: PublicAIHypothesis[], round
       check: round === 1 ? summary : recommendedCheck,
       ...(round === 1 ? { reasoning: summary, recommendedCheck } : { originRef: hypothesis.origin_ref, mechanism: hypothesis.mechanism }) };
   });
+}
+
+const title = (value: string) => value.length <= 200 ? value : `${value.slice(0, 197).trimEnd()}...`;
+
+export function supplementalHypothesesForSave(causes: Cause[], roundOne: Cause[], roundTwo: Cause[], focusLabels: Record<string, string>): SupplementalHypothesis[] {
+  const acceptedIds = new Set(causes.filter(cause => cause.source !== 'user').map(cause => cause.id));
+  const seen = new Set<string>();
+  const remainingRoundOne = roundOne.flatMap(cause => {
+    if (acceptedIds.has(cause.id) || seen.has(cause.id)) return [];
+    seen.add(cause.id);
+    return [{
+      category: cause.category,
+      title: title(`Prüfhypothese: ${cause.text}`),
+      description: cause.check || cause.text,
+      ...(cause.data?.length ? { data: cause.data } : {}),
+    }];
+  });
+  const roundTwoEnrichments = roundTwo.flatMap(cause => {
+    if (seen.has(cause.id)) return [];
+    seen.add(cause.id);
+    const origin = focusLabels[cause.originRef || ''] || 'ausgewählte Ausgangshypothese';
+    return [{
+      category: cause.category,
+      title: title(`Vertiefung: ${cause.text}`),
+      description: [`Vertiefung zu: ${origin}`, `Kausaler Mechanismus: ${cause.mechanism || 'nicht angegeben'}`, `Prüfschritt: ${cause.check || 'nicht angegeben'}`].join('\n'),
+    }];
+  });
+  return [...remainingRoundOne, ...roundTwoEnrichments];
 }
