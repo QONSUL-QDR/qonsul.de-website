@@ -30,7 +30,9 @@ assert.equal(selected.focus_causes[1].recommended_check, roundOne[0].recommended
 assert.equal(selected.prior_hypotheses.length, 12, 'all first-round suggestions prevent repetition');
 assert.deepEqual(parseFocusPayload(selected, selected.causes), { focus_causes: selected.focus_causes, prior_hypotheses: selected.prior_hypotheses });
 assert.throws(() => parseFocusPayload({ ...selected, focus_causes: [{ ...selected.focus_causes[1], origin_ref: uuid(99) }] }, selected.causes), /Unknown AI cause/);
-assert.throws(() => parseFocusPayload({ ...selected, prior_hypotheses: selected.prior_hypotheses.slice(1) }, selected.causes), /Invalid focus payload/);
+const afterRemoval = { ...selected, prior_hypotheses: selected.prior_hypotheses.slice(1) };
+assert.equal(parseFocusPayload(afterRemoval, afterRemoval.causes).prior_hypotheses.length, 11, 'one dismissed first-round hypothesis remains valid Round-2 context');
+assert.throws(() => parseFocusPayload({ ...selected, prior_hypotheses: [] }, selected.causes), /Invalid focus payload/);
 
 const hypothesis = (ref, id) => ({ id: uuid(id), origin_ref: ref, category: 'Messung', text: `Zusätzliche Hypothese ${id}.`,
   mechanism: 'Ein konkreter Kontaktmechanismus verschiebt die Bauteillage.', recommended_check: 'Referenzteile unter identischen Bedingungen vergleichen.', origin: 'ai' });

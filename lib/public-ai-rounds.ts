@@ -34,7 +34,7 @@ export function parseFocusPayload(value: unknown, ownCauses: { category: string;
   if (!value || typeof value !== 'object') throw new Error('Invalid focus payload');
   const body = value as { focus_causes?: unknown; prior_hypotheses?: unknown };
   if (!Array.isArray(body.focus_causes) || body.focus_causes.length < 1 || body.focus_causes.length > 30 ||
-      !Array.isArray(body.prior_hypotheses) || body.prior_hypotheses.length !== 12) throw new Error('Invalid focus payload');
+      !Array.isArray(body.prior_hypotheses) || body.prior_hypotheses.length < 1 || body.prior_hypotheses.length > 12) throw new Error('Invalid focus payload');
   const prior = body.prior_hypotheses.map(item => {
     if (!item || typeof item !== 'object') throw new Error('Invalid prior hypothesis');
     const row = item as PriorHypothesis;
