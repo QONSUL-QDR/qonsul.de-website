@@ -16,6 +16,7 @@ import {
   buildIdFor,
   buildReleaseManifest,
   parseAnnotatedTag,
+  PRODUCTION_CANDIDATE_TAG_RULESET_NAME,
   selectReleaseTagRuleset,
 } from '../lib/production-artifact.mjs';
 import { PRODUCTION_PUBLIC_RUNTIME_V1, assertProductionPublicRuntimeVars } from '../lib/production-public-runtime.mjs';
@@ -58,6 +59,7 @@ assert.equal(buildIdFor(commit, tree), `${commit}:${tree}`);
 
 const ruleset = {
   id: 1,
+  name: PRODUCTION_CANDIDATE_TAG_RULESET_NAME,
   target: 'tag',
   enforcement: 'active',
   conditions: { ref_name: { include: ['refs/tags/website-production-candidate-*'] } },
@@ -67,6 +69,7 @@ const ruleset = {
 assert.equal(selectReleaseTagRuleset([ruleset]), 1);
 const stagingTagRuleset = {
   id: 2,
+  name: 'Protect Staging E2E PASS tags',
   target: 'tag',
   enforcement: 'active',
   conditions: { ref_name: { include: ['refs/tags/staging-e2e-pass-*'] } },
