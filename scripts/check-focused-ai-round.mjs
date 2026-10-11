@@ -30,7 +30,7 @@ assert.equal(selected.focus_causes[1].recommended_check, roundOne[0].recommended
 assert.equal(selected.prior_hypotheses.length, 12, 'all first-round suggestions prevent repetition');
 assert.deepEqual(parseFocusPayload(selected, selected.causes), { focus_causes: selected.focus_causes, prior_hypotheses: selected.prior_hypotheses });
 assert.throws(() => parseFocusPayload({ ...selected, focus_causes: [{ ...selected.focus_causes[1], origin_ref: uuid(99) }] }, selected.causes), /Unknown AI cause/);
-const afterRemoval = { ...selected, prior_hypotheses: selected.prior_hypotheses.slice(1) };
+const afterRemoval = focusedRoundRequest([...own, roundOne[1]], roundOne.slice(1), [own[0].id, roundOne[1].id]);
 assert.equal(parseFocusPayload(afterRemoval, afterRemoval.causes).prior_hypotheses.length, 11, 'one dismissed first-round hypothesis remains valid Round-2 context');
 assert.throws(() => parseFocusPayload({ ...selected, prior_hypotheses: [] }, selected.causes), /Invalid focus payload/);
 
