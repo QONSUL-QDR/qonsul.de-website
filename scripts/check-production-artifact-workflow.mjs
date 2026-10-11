@@ -65,6 +65,16 @@ const ruleset = {
   current_user_can_bypass: 'never',
 };
 assert.equal(selectReleaseTagRuleset([ruleset]), 1);
+const stagingTagRuleset = {
+  id: 2,
+  target: 'tag',
+  enforcement: 'active',
+  conditions: { ref_name: { include: ['refs/tags/staging-e2e-pass-*'] } },
+  rules: [{ type: 'deletion' }, { type: 'non_fast_forward' }, { type: 'update' }],
+  current_user_can_bypass: 'never',
+};
+assert.equal(selectReleaseTagRuleset([ruleset, stagingTagRuleset]), 1);
+assert.throws(() => selectReleaseTagRuleset([stagingTagRuleset]));
 assertReleaseTagRuleset(ruleset);
 assert.throws(() => assertReleaseTagRuleset({ ...ruleset, current_user_can_bypass: 'always' }));
 
