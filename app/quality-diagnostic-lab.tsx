@@ -177,6 +177,7 @@ export default function QualityDiagnosticLab({ launch }: { launch?: { problem: s
   function beginAIPolling(sourceEventId: string, analysisRound: 1 | 2, focused: ReturnType<typeof focusedRoundRequest> | null, targets: Map<string, string>) {
     aiPollingRun.current = startAIHypothesesRun<Cause>({
       sourceEventId, analysisRound,
+      deadlineMs: 165_000,
       submit: async (id, round, signal) => {
         const response = await fetch('/api/diagnostic-ai-hypotheses', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
