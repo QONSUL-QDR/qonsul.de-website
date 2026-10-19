@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
-import ts from 'typescript';
+import {transformSync} from 'esbuild';
 
 const root=process.cwd(),tmp=path.join(root,'tmp','pdfs');
 await mkdir(tmp,{recursive:true});
 const compile=async(source,target)=>{
   const input=await readFile(source,'utf8');
-  const output=ts.transpileModule(input,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext}}).outputText.replace("'./analysis'","'./analysis.mjs'").replace("'./qonsul-logo-pdf'","'./qonsul-logo-pdf.mjs'");
+  const output=transformSync(input,{loader:'ts',format:'esm',target:'es2020'}).code.replace('"./analysis"','"./analysis.mjs"').replace('"./qonsul-logo-pdf"','"./qonsul-logo-pdf.mjs"');
   await writeFile(target,output);
 };
 await compile(path.join(root,'lib','analysis.ts'),path.join(tmp,'analysis.mjs'));
