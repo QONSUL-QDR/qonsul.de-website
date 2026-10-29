@@ -3,9 +3,10 @@ export type Category = typeof CATEGORIES[number];
 export const DATA_KINDS = ['Anforderungen & FMEA', 'Prüf- & Messdaten', 'Prozessparameter', 'Chargen & Lieferanten', 'Reklamationen & Felddaten', 'Umgebungsdaten', 'Änderungshistorie', 'Prüfmittel & Kalibrierung'] as const;
 export type DataKind = typeof DATA_KINDS[number];
 export type Source = 'user' | 'ai' | 'rules';
-export type Cause = { id: string; category: Category; text: string; source: Source; check?: string; metric?: string; data?: DataKind[] };
+export type Cause = { id: string; category: Category; text: string; source: Source; check?: string; reasoning?: string; recommendedCheck?: string; originRef?: string; mechanism?: string; metric?: string; data?: DataKind[] };
+export type SupplementalHypothesis = { category: Category; title: string; description: string; data?: DataKind[] };
 export type BlindSpot = { id: string; category: Category; prompt: string };
-export type Analysis = { problem: string; causes: Cause[]; mode: 'manual' | 'ai' | 'rules'; availableData?: DataKind[] };
+export type Analysis = { problem: string; causes: Cause[]; mode: 'manual' | 'ai' | 'rules'; availableData?: DataKind[]; supplementalHypotheses?: SupplementalHypothesis[] };
 export const METRICS = ['Ausfallrate', 'Ausschussquote', 'Nacharbeitsquote', 'Anforderungsabdeckung', 'Messsystemstreuung', 'Maßnahmenwirksamkeit'] as const;
 export const CONSENT_VERSION = '2026-08-30-v1';
 export const categoryHints: Record<Category, string> = {
@@ -77,6 +78,17 @@ function parseData(value:unknown):DataKind[] {
   if(!Array.isArray(value)||value.length>DATA_KINDS.length||value.some(d=>!DATA_KINDS.includes(d as DataKind)))throw new Error('Ungültige Datengrundlage.');
   return [...new Set(value)] as DataKind[];
 }
+function parseSupplementalHypotheses(value: unknown): SupplementalHypothesis[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 20) throw new Error('Zu viele zusätzliche Hypothesen.');
+  return value.map((item): SupplementalHypothesis => {
+    if (!item || typeof item !== 'object') throw new Error('Ungültige zusätzliche Hypothese.');
+    const hypothesis = item as Record<string, unknown>;
+    if (!CATEGORIES.includes(hypothesis.category as Category) || typeof hypothesis.title !== 'string' || hypothesis.title.trim().length < 3 || hypothesis.title.length > 200 ||
+        typeof hypothesis.description !== 'string' || hypothesis.description.trim().length < 3 || hypothesis.description.length > 5000) throw new Error('Ungültige zusätzliche Hypothese.');
+    return { category: hypothesis.category as Category, title: hypothesis.title.trim(), description: hypothesis.description.trim(), data: parseData(hypothesis.data) };
+  });
+}
 export function parseAnalysis(value: unknown): Analysis {
   if (!value || typeof value !== 'object') throw new Error('Analyse fehlt.');
   const v = value as Record<string, unknown>;
@@ -91,7 +103,8 @@ export function parseAnalysis(value: unknown): Analysis {
     return {id:'cause-'+i,category:c.category as Category,text:c.text.trim(),source:c.source as Source,...(c.check?{check:c.check as string}:{}),...(c.metric?{metric:c.metric as string}:{}),data:parseData(c.data)};
   });
   if(CATEGORIES.some(category=>causes.filter(c=>c.category===category).length>5 || causes.filter(c=>c.category===category&&c.source==='user').length>3 || causes.filter(c=>c.category===category&&c.source!=='user').length>2)) throw new Error('Maximal drei eigene und zwei ergänzte Ursachen je Kategorie.');
-  return {problem:v.problem.trim(),causes,availableData:parseData(v.availableData),mode:causes.some(c=>c.source==='ai')?'ai':causes.some(c=>c.source==='rules')?'rules':'manual'};
+  const supplementalHypotheses = parseSupplementalHypotheses(v.supplementalHypotheses);
+  return {problem:v.problem.trim(),causes,availableData:parseData(v.availableData),mode:causes.some(c=>c.source==='ai')?'ai':causes.some(c=>c.source==='rules')?'rules':'manual',...(supplementalHypotheses.length ? { supplementalHypotheses } : {})};
 }
 export function redactForAI(value: string) {
   return value.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,'[E-Mail entfernt]').replace(/https?:\/\/\S+/g,'[URL entfernt]').replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g,'[IP entfernt]').replace(/\b(?:sk-|ghp_|github_pat_)[\w-]+/g,'[Zugangsschlüssel entfernt]');

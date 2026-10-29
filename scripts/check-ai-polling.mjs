@@ -3,7 +3,7 @@ import { startAIHypothesesRun } from '../lib/ai-polling.ts';
 
 const firstId = '11111111-1111-4111-8111-111111111111';
 const secondId = '22222222-2222-4222-8222-222222222222';
-const firstCauses = [{ id: 'first-a' }, { id: 'first-b' }];
+const firstCauses = Array.from({ length: 12 }, (_, index) => ({ id: `first-${index + 1}` }));
 const secondCauses = [{ id: 'second-a' }];
 const outcome = () => {
   let resolve;
@@ -21,7 +21,7 @@ const firstDone = outcome();
 const started = [];
 const polled = [];
 const statuses = [
-  { status: 'processing' },
+  { status: 'not_found' },
   { status: 'processing' },
   { status: 'completed', causes: firstCauses },
 ];
@@ -45,7 +45,7 @@ startAIHypothesesRun({
 await withLimit(firstDone.promise);
 assert.deepEqual(ui, { hypotheses: firstCauses, completedRounds: 1, error: '' }, 'completed hypotheses appear on the first run without another click');
 assert.deepEqual(started, [{ id: firstId, round: 1 }], 'the first start endpoint is called exactly once');
-assert.deepEqual(polled, [firstId, firstId, firstId], 'all processing and completed statuses belong to the first ID');
+assert.deepEqual(polled, [firstId, firstId, firstId], 'not_found, processing and completed statuses belong to the first ID');
 
 const secondDone = outcome();
 startAIHypothesesRun({

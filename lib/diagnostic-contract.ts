@@ -30,18 +30,27 @@ export function diagnosticEvent(sourceEventId: string, analysis: Analysis, analy
   const categories = CATEGORIES.flatMap(category => {
     const causes = byCategory.get(category) || [];
     const userCauses = causes.filter(cause => cause.source === 'user').map(cause => cause.text);
-    const hasHypothesis = causes.some(cause => cause.source !== 'user');
+    const hasHypothesis = causes.some(cause => cause.source !== 'user') || (analysis.supplementalHypotheses || []).some(hypothesis => hypothesis.category === category);
     if (!userCauses.length && !hasHypothesis) return [];
     return [{ code: categoryCodes[category], ...(userCauses.length ? { causes: userCauses } : {}) }];
   });
   if (!categories.length) throw new Error('Bitte ergänzen Sie mindestens eine Beobachtung oder Hypothese.');
-  const hypotheses = analysis.causes.filter(cause => cause.source !== 'user').map(cause => ({
+  const hypotheses = [
+    ...analysis.causes.filter(cause => cause.source !== 'user').map(cause => ({
     title: `Prüfhypothese: ${cause.text}`.slice(0, 200),
     description: cause.check || cause.text,
     category_code: categoryCodes[cause.category],
     plausibility_score: 50,
     required_data: cause.data?.join(', ') || null,
-  }));
+    })),
+    ...(analysis.supplementalHypotheses || []).map(hypothesis => ({
+      title: hypothesis.title,
+      description: hypothesis.description,
+      category_code: categoryCodes[hypothesis.category],
+      plausibility_score: 50,
+      required_data: hypothesis.data?.join(', ') || null,
+    })),
+  ];
   const available = new Set(analysis.availableData || []);
   const available_data = DATA_KINDS.filter(kind => available.has(kind)).map(kind => ({
     name: kind, type: kind, availability: 'available' as const, quality_score: 50,

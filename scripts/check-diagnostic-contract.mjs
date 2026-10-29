@@ -7,6 +7,7 @@ import {requestPublicAIHypotheses,requestPublicAIHypothesesStatus,PublicAIIntake
 import {nextAIHypothesesPollingAction} from '../lib/ai-polling.ts';
 import {invalidateDraftSubmissionId,submissionIdForSave,withSavingState} from '../lib/diagnostic-submission-lifecycle.ts';
 import {suggestBlindSpots} from '../lib/analysis.ts';
+import {supplementalHypothesesForSave} from '../lib/public-ai-rounds.ts';
 import {isCockpitIntakeConfigured} from '../lib/cockpit-intake-config.ts';
 import {diagnosticFailure} from '../lib/diagnostic-response.ts';
 import {LocalDatabaseUnavailableError} from '../lib/runtime-errors.ts';
@@ -30,6 +31,14 @@ assert.equal(event.hypotheses.length,1);
 assert.match(event.hypotheses[0].title,/Prüfhypothese/);
 assert.equal(JSON.stringify(event).includes('contact'),false);
 assert.equal(JSON.stringify(event).includes('company'),false);
+
+const roundOneForSave=Array.from({length:11},(_,index)=>({id:`round-one-${index}`,category:'Prozess',text:`Synthetische Round-1-Hypothese ${index + 1}`,source:'ai',check:`Round-1-Prüfschritt ${index + 1}`}));
+const roundTwoForSave=Array.from({length:6},(_,index)=>({id:`round-two-${index}`,category:'Prozess',text:`Synthetische Round-2-Vertiefung ${index + 1}`,source:'ai',originRef:`round-one-${index}`,mechanism:`Synthetischer Mechanismus ${index + 1}`,check:`Synthetischer Prüfschritt ${index + 1}`}));
+const persistedAnalysis={...analysis,causes:[analysis.causes[0],roundOneForSave[0]],supplementalHypotheses:supplementalHypothesesForSave([analysis.causes[0],roundOneForSave[0]],roundOneForSave,roundTwoForSave,Object.fromEntries(roundOneForSave.map(hypothesis=>[hypothesis.id,hypothesis.text])))};
+const persistedEvent=diagnosticEvent('33333333-3333-4333-8333-333333333333',persistedAnalysis);
+assert.equal(persistedEvent.hypotheses.length,17,'eleven remaining Round-1 hypotheses and six Round-2 enrichments are stored together');
+assert.equal(persistedEvent.hypotheses.filter(hypothesis=>hypothesis.title.startsWith('Vertiefung:')).length,6,'every Round-2 enrichment remains visibly marked');
+assert.match(persistedEvent.hypotheses.find(hypothesis=>hypothesis.title.startsWith('Vertiefung:'))?.description||'',/Vertiefung zu: Synthetische Round-1-Hypothese 1\nKausaler Mechanismus: Synthetischer Mechanismus 1\nPrüfschritt: Synthetischer Prüfschritt 1/,'every Round-2 enrichment retains its origin, mechanism, and check');
 
 const browserBlindspots={...analysis,causes:[
   analysis.causes[0],
@@ -86,8 +95,15 @@ await assert.rejects(()=>withSavingState(value=>timeoutStates.push(value),async(
 assert.deepEqual(timeoutStates,[true,false],'timeout ends saving state');
 
 const correctionToken='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,correction_token:correctionToken,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async()=>Response.json({status:'pending_review',diagnostic_id:id,correction_token:correctionToken},{status:201})});
+let consultationPosts=0;
+const consultation=await requestDiagnosticConsultation({source_event_id:id,diagnostic_id:id,correction_token:correctionToken,contact:{name:'Fiktiv',email:'fiktiv@example.invalid'},company:{name:'Fiktives Testunternehmen'},consent:{contact_requested:true,privacy_version:'2026-08-31-v1'}},{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
+  assert.equal(new URL(String(url)).pathname,'/api/v1/intake/diagnostic/consultation');
+  assert.deepEqual(JSON.parse(String(init?.body)).company,{name:'Fiktives Testunternehmen'});
+  consultationPosts++;
+  return Response.json({status:'pending_review',diagnostic_id:id,correction_token:correctionToken},{status:201});
+}});
 assert.deepEqual(consultation,{status:'pending_review',diagnosticId:id,correctionToken});
+assert.equal(consultationPosts,1,'the consultation sends the company once to Cockpit');
 let correctionSeen=false;
 const correction=await correctDiagnosticConsultationEmail({source_event_id:id,correction_token:correctionToken,new_correction_token:correctionToken,email:'neu@example.invalid'},{baseUrl:'https://cockpit.example',secret,fetchImpl:async(url,init)=>{
   assert.equal(new URL(String(url)).pathname,'/api/v1/intake/diagnostic/consultation/email-correction');
@@ -202,12 +218,13 @@ assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses'/,'Public Dia
 assert.match(diagnosticUi,/const \[aiSuggestions, setAiSuggestions\] = useState<Cause\[\]>\(\[\]\)/,'AI responses remain separate from the Cause Map until user selection');
 assert.match(diagnosticUi,/const \[completedAIRounds, setCompletedAIRounds\] = useState\(0\)/,'the AI round counter starts at zero for every new Diagnostic flow');
 assert.match(diagnosticUi,/const analysisRound: 1 \| 2 = completedAIRounds === 0 \? 1 : 2/,'the browser derives an explicit first or second analysis round without changing the UX');
-assert.match(diagnosticUi,/if \(!status\.ai\) return setNotice\('Die QONSUL-Analyse ist derzeit nicht verfügbar\./,'an unavailable intake is explained before either click can start generation');
+assert.doesNotMatch(diagnosticUi,/if \(!status\.ai\)/,'an unresolved advisory readiness request cannot discard the first AI click');
+assert.match(diagnosticUi,/result\.code === 'ai_intake_not_configured'\) return \{ status: 'failed', reason: 'unavailable' \}/,'the server still provides the unavailable result after a genuine failed start');
 assert.match(diagnosticUi,/const sourceEventId = crypto\.randomUUID\(\);/,'each accepted click creates a new source event ID rather than replaying a previous request');
-assert.match(diagnosticUi,/sourceEventId: id, analysisRound: round, problem, causes: \[\.\.\.causes, \.\.\.aiSuggestions\]/,'each bounded AI generation sends its round and preserves the original problem plus unconfirmed context');
-assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+activateAnalysisConversion\(\);[\s\S]*?\} else \{\s+setCompletedAIRounds\(previous => Math\.min\(previous \+ 1, 2\)\);/,'only a successful AI result with at least one usable hypothesis advances a bounded round counter');
+assert.match(diagnosticUi,/sourceEventId: id, analysisRound: round, problem, \.\.\.focused/,'the second round sends only its explicit focused snapshot');
+assert.match(diagnosticUi,/if \(round === 2\) \{[\s\S]*?setRoundTwoSuggestions\(result\.causes \|\| \[\]\);[\s\S]*?setCompletedAIRounds\(2\);[\s\S]*?activateAnalysisConversion\(\)/,'the second result is shown and closes further generation');
 assert.match(diagnosticUi,/\{!analysisExhausted && completedAIRounds === 0 && <button[^>]+boost-action-button[^>]+onClick=\{\(\) => addAIHypotheses\(\)\}[\s\S]*?QONSUL Expertise einbeziehen/,'the initial QONSUL action is visible only before the first successful AI round and never beside conversion');
-assert.match(diagnosticUi,/\{!analysisExhausted && completedAIRounds > 0 && <button[^>]+boost-action-button[^>]+onClick=\{\(\) => addAIHypotheses\(true\)\}[\s\S]*?QONSUL Expertise vertiefen/,'deliberate regeneration uses the branded follow-up action only while another round is allowed');
+assert.match(diagnosticUi,/\{completedAIRounds > 0 && <button[^>]+boost-action-button[^>]+disabled=\{busy \|\| analysisExhausted\}[^>]+onClick=\{\(\) => addAIHypotheses\(true\)\}[\s\S]*?QONSUL Expertise vertiefen/,'the existing follow-up action starts round two and becomes disabled after completion');
 assert.doesNotMatch(diagnosticUi,/KI-Hypothesen ergänzen|Neue KI-Hypothesen erstellen/,'technical AI terms are not shown in action labels');
 assert.doesNotMatch(diagnosticUi,/aiSuggestions\.length > 0 && <button[^>]+QONSUL Expertise vertiefen/,'button visibility is independent of remaining suggestion count');
 assert.equal((diagnosticUi.match(/QONSUL ergänzt Ihre Analyse um weitere technisch prüfbare Perspektiven\./g)||[]).length,1,'the branded action explanation is visible exactly once');
@@ -218,6 +235,8 @@ assert.match(diagnosticUi,/setAiSuggestions\(accepted\)/,'AI responses are stage
 assert.doesNotMatch(diagnosticUi,/setCauses\(previous => \[\.\.\.previous, \.\.\.accepted\]\)/,'AI suggestions must not be inserted into the Cause Map automatically');
 assert.match(diagnosticUi,/function acceptAISuggestion/,'each AI suggestion requires an explicit accept action');
 assert.match(diagnosticUi,/function dismissAISuggestion/,'each AI suggestion can be dismissed without changing the Cause Map');
+assert.match(diagnosticUi,/function dismissAISuggestion\(id: string\) \{[\s\S]*?setRoundOneHypotheses\(previous => previous\.filter\(item => item\.id !== id\)\)/,'a dismissed Round-1 suggestion cannot be persisted later');
+assert.match(diagnosticUi,/cause\.source !== 'user'\) setRoundOneHypotheses\(previous => previous\.filter\(item => item\.id !== cause\.id\)\)/,'a removed accepted Round-1 suggestion cannot be persisted later');
 const blindSpotHandler=diagnosticUi.match(/function addBlindspots\(\) \{[\s\S]*?\n  \}\n  function applyAIHypotheses/)?.[0]||'';
 assert.match(blindSpotHandler,/const uncovered = suggestBlindSpots\(problem, causes\);\s+setBlindSpots\(uncovered\.length \? uncovered : suggestBlindSpots\(problem\)\);/,'blind spots remain available before and after every AI round, even when every category already has a hypothesis');
 assert.doesNotMatch(blindSpotHandler,/setCompletedAIRounds|setAnalysisExhausted|setCauses/,'blind spots never advance AI rounds, activate conversion, or create causes');
@@ -234,17 +253,17 @@ assert.match(diagnosticUi,/const \[analysisProgress, setAnalysisProgress\] = use
 assert.match(diagnosticUi,/resetAnalysisProgress\(\); setAnalysisProgress\('active'\);/,'progress starts only after a provider-backed AI run passes the local conversion guard');
 assert.match(diagnosticUi,/QONSUL Analyse läuft …/,'the branded loading state is visible while an AI request is active');
 assert.match(diagnosticUi,/aria-busy=\{analysisBusy\}/,'the running action communicates busy state accessibly');
-assert.match(diagnosticUi,/beginAIPolling\(sourceEventId, analysisRound\)/,'one click begins a bounded run for its source event ID and analysis round');
+assert.match(diagnosticUi,/beginAIPolling\(sourceEventId, analysisRound, focused, targets\)/,'one click begins a bounded run with a frozen focused snapshot');
 assert.match(diagnosticUi,/startAIHypothesesRun<Cause>\(\{/,'the browser uses the tested cancellable run coordinator');
 assert.match(diagnosticUi,/fetch\('\/api\/diagnostic-ai-hypotheses\/status'/,'polling uses the Website same-origin status route');
-assert.match(diagnosticUi,/body: JSON\.stringify\(\{ sourceEventId: id \}\)/,'polling reuses the generation source event ID');
+assert.match(diagnosticUi,/body: JSON\.stringify\(\{ sourceEventId: id, analysisRound \}\)/,'polling reuses the generation source event ID and round');
 assert.match(diagnosticUi,/signal: AbortSignal\.any\(\[signal, AbortSignal\.timeout\(12_000\)\]\)/,'a single slow status request is bounded and cancellable');
 assert.match(diagnosticUi,/aiResultApplied\.current/,'generation and polling responses are settled only once');
 assert.match(diagnosticUi,/response\.status === 202 && result\.status === 'processing'/,'an accepted asynchronous submission remains in the neutral polling state');
-assert.match(diagnosticUi,/onComplete: result => applyAIHypotheses\(result\)/,'a completed run applies its hypotheses without another click');
+assert.match(diagnosticUi,/onComplete: result => applyAIHypotheses\(result, analysisRound, sourceEventId, targets\)/,'a completed run applies only to its own round without another click');
 assert.match(diagnosticUi,/onFail: failAIAnalysis/,'failed and timed-out runs remain separate from completed results');
 assert.match(diagnosticUi,/aiPollingRun\.current\?\.cancel\(\)/,'cleanup aborts the active run');
-const aiSuccessHandler=diagnosticUi.match(/function applyAIHypotheses\(result: \{ causes\?: Cause\[\]; notice\?: string \}\) \{[\s\S]*?\n  \}/)?.[0]||'';
+const aiSuccessHandler=diagnosticUi.match(/function applyAIHypotheses\(result: \{ causes\?: Cause\[\]; notice\?: string \}, round: 1 \| 2, runId: string, targets: Map<string, string>\) \{[\s\S]*?\n  \}/)?.[0]||'';
 assert.match(aiSuccessHandler,/setError\(''\);/,'a successful AI result clears any stale AI error');
 assert.match(diagnosticUi,/function failAIAnalysis\(reason: 'failed' \| 'timeout' \| 'unavailable'\) \{\s+cancelAIAnalysis\(\);/,'failed polling resets the active run without showing completion');
 const aiFailureHandler=diagnosticUi.match(/function failAIAnalysis\(reason: 'failed' \| 'timeout' \| 'unavailable'\) \{[\s\S]*?\n  \}/)?.[0]||'';
@@ -257,20 +276,20 @@ assert.match(conversionActivator,/setAnalysisExhausted\(true\);/,'the canonical 
 assert.match(conversionActivator,/setOpenConsultationAfterSave\(true\);/,'the canonical conversion action preserves the after-save consultation intent');
 assert.match(conversionActivator,/setError\(''\);/,'the canonical conversion action clears only stale technical UI errors');
 assert.match(conversionActivator,/setNotice\('Die verfügbaren Analyseperspektiven sind bereits umfassend ausgeschöpft\.'/,'the canonical conversion action keeps the controlled exhaustion notice');
-assert.match(diagnosticUi,/if \(accepted\.length === 0\) \{\s+activateAnalysisConversion\(\);/,'a technically successful AI result without usable hypotheses activates the complete conversion state immediately');
+assert.match(diagnosticUi,/if \(round === 2\) \{[\s\S]*?setRoundTwoSuggestions\(result\.causes \|\| \[\]\);[\s\S]*?setCompletedAIRounds\(2\);[\s\S]*?activateAnalysisConversion\(\)/,'the second result is shown and closes further generation');
 const thirdRoundBranch=diagnosticUi.match(/if \(completedAIRounds >= 2\) \{[\s\S]*?\n    \}/)?.[0]||'';
 assert.match(thirdRoundBranch,/activateAnalysisConversion\(\);\s+return;/,'a third deliberate AI attempt activates the complete conversion state locally');
 assert.doesNotMatch(thirdRoundBranch,/sourceEventId|beginAIPolling|setAnalysisProgress|fetch\(/,'the third deliberate attempt creates no event, polling, progress animation, or generation request');
 assert.doesNotMatch(diagnosticUi,/hasAICapacity/,'local capacity cannot block the required second AI round or activate conversion after round one');
 assert.match(diagnosticUi,/if \(aiRequestInFlight\.current \|\| analysisExhausted\) return;/,'a completed conversion state cannot restart an AI request');
-assert.match(diagnosticUi,/sourceEventId: id, analysisRound: round, problem, causes: \[\.\.\.causes, \.\.\.aiSuggestions\]/,'round two sends accepted and still-visible unconfirmed hypotheses as analysis context');
+assert.match(diagnosticUi,/focusedRoundRequest\(causes, roundOneHypotheses, selectedFocusIds\)/,'round two derives selected targets and complete first-round context');
 assert.match(diagnosticUi,/function start\(value = input\) \{[\s\S]*?cancelAIAnalysis\(\);/,'a new Diagnostic flow clears visual progress and polling');
 assert.doesNotMatch(diagnosticUi,/setError\('Für ergänzende Hypothesen ist in den gewählten Perspektiven kein Platz mehr frei\.'/,'capacity exhaustion is never rendered as a red technical error');
-assert.match(diagnosticUi,/setCompletedAIRounds\(previous => Math\.min\(previous \+ 1, 2\)\);\s+setAnalysisExhausted\(false\);\s+setAiSuggestions\(accepted\)/,'both successful AI rounds keep their new hypotheses visible and do not activate conversion');
+assert.match(diagnosticUi,/setCompletedAIRounds\(1\);[\s\S]*?setAiSuggestions\(accepted\);[\s\S]*?setRoundOneHypotheses\(accepted\)/,'round one retains all suggestions for the focused request and duplicate avoidance');
 assert.match(diagnosticUi,/Analyseperspektiven umfassend ausgeschöpft/,'the neutral conversion heading is displayed');
 assert.match(diagnosticUi,/Analyse mit QONSUL vertiefen →/,'the conversion CTA is displayed');
 assert.match(diagnosticUi,/\{analysisExhausted && <section className="analysis-exhausted"[\s\S]*?<h3>Analyseperspektiven umfassend ausgeschöpft<\/h3>[\s\S]*?Analyse mit QONSUL vertiefen →/,'the active conversion state renders the complete exhaustion callout and CTA together');
-assert.match(diagnosticUi,/\{!analysisExhausted && completedAIRounds > 0 && <button[^>]+[\s\S]*?QONSUL Expertise vertiefen/,'the follow-up action is hidden while the conversion state is active');
+assert.match(diagnosticUi,/analysisExhausted \? 'Analyseperspektiven umfassend ausgeschöpft' : analysisBusy/,'the existing follow-up action shows the neutral terminal label');
 assert.match(diagnosticUi,/function continueToConsultation\(\) \{\s+if \(saved\) return setConsultationOpen\(true\);\s+setOpenConsultationAfterSave\(true\);\s+document\.getElementById\('diagnostic-save'\)/,'the CTA only opens the existing consultation form after saving or leads to the existing save step without submitting data');
 const consultationCtaHandler=diagnosticUi.match(/function continueToConsultation\(\) \{[\s\S]*?\n  \}/)?.[0]||'';
 assert.doesNotMatch(consultationCtaHandler,/fetch\(|save\(/,'the conversion CTA itself neither persists a Diagnostic nor creates CRM data');
@@ -285,7 +304,7 @@ assert.match(diagnosticUi,/Eigene Beobachtung formulieren/,'blind spots guide th
 const publicAiRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/route.ts',import.meta.url),'utf8');
 assert.match(publicAiRoute,/reason: error\.reason/,'the staging intake trace identifies configuration and provider response failures');
 assert.match(publicAiRoute,/outbound_attempted: error\.outboundAttempted/,'the trace does not falsely claim an outbound request for configuration failures');
-assert.match(publicAiRoute,/result\.hypotheses\.map\(\(hypothesis, index\) => \(\{/,'the Website submission route maps the complete Cockpit array without slicing');
+assert.match(publicAiRoute,/publicHypothesesAsCauses\(result\.hypotheses, body\.analysisRound\)/,'the Website submission route validates and maps the full Cockpit array');
 assert.match(publicAiRoute,/Retry-After/,'429 responses include a controlled retry hint');
 assert.match(publicAiRoute,/Die QONSUL-Analyse wurde gerade bereits ausgeführt/,'429 responses use a safe public QONSUL message');
 assert.match(publicAiRoute,/QONSUL-Hypothesen ergänzt\. Bitte mit Daten validieren; keine bestätigten Ursachen\./,'the successful public status message uses QONSUL hypotheses');
@@ -297,7 +316,7 @@ assert.match(publicAiRoute,/body\.analysisRound !== 1 && body\.analysisRound !==
 assert.match(publicAiRoute,/analysis_round: body\.analysisRound/,'the Website forwards the explicit round to Cockpit');
 assert.doesNotMatch(publicAiRoute,/analysis\.causes\.filter\(cause => cause\.source === 'user'\)/,'AI context is no longer restricted to user observations alone');
 const publicAiStatusRoute=await readFile(new URL('../app/api/diagnostic-ai-hypotheses/status/route.ts',import.meta.url),'utf8');
-assert.match(publicAiStatusRoute,/result\.hypotheses!\.map\(\(hypothesis, index\) => \(\{/,'the Website status route maps the complete Cockpit array without slicing');
+assert.match(publicAiStatusRoute,/publicHypothesesAsCauses\(result\.hypotheses!, body\.analysisRound === 2 \? 2 : 1\)/,'the Website status route maps the full Cockpit array by round');
 assert.match(publicAiStatusRoute,/Die QONSUL-Hypothesen konnten nicht ergänzt werden/,'status errors use QONSUL hypotheses');
 assert.match(publicAiStatusRoute,/requestPublicAIHypothesesStatus/,'the browser-facing status endpoint signs a server-side Cockpit status request');
 assert.doesNotMatch(publicAiStatusRoute,/requestPublicAIHypotheses\(/,'the status endpoint cannot start generation');
@@ -307,7 +326,8 @@ assert.ok(statusPollLimit>=5*pollsPerRun+60,'the status limit supports at least 
 assert.match(publicAiRoute,/rateLimit\(request, 'public-ai-hypotheses', 5\)/,'the generation endpoint keeps its strict independent limit');
 assert.match(diagnosticUi,/<form noValidate onSubmit=/,'custom problem-length validation must run before the Diagnostic flow starts');
 assert.match(diagnosticUi,/id="diagnostic-problem-error" role="alert"/,'the ten-character validation error must be visible and announced');
-assert.match(diagnosticUi,/Ihre Anfrage ist eingegangen\. Wir haben Ihnen eine Bestätigungs-E-Mail gesendet\./);
+assert.match(diagnosticUi,/setConsultationNotice\('Ihre Anfrage ist eingegangen\.'\)/);
+assert.doesNotMatch(diagnosticUi,/Wir haben Ihnen eine Bestätigungs-E-Mail gesendet\./);
 assert.match(diagnosticUi,/E-Mail-Adresse korrigieren/);
 assert.match(diagnosticUi,/readConsultationCorrectionLink\(\)/,'the Diagnostic page validates local correction-link expiry when reading storage');
 assert.match(diagnosticUi,/Die Beratungsanfrage konnte nicht übermittelt werden\. Bitte versuchen Sie es erneut\./);
@@ -326,8 +346,10 @@ assert.match(correctionStorage,/stored\.expiresAt <= now[\s\S]*?localStorage\.re
 const analyticsClient=await readFile(new URL('../app/analytics-client.tsx',import.meta.url),'utf8');
 assert.match(analyticsClient,/current\.startsWith\('\/anfrage-verwalten\/'\) \? '\/anfrage-verwalten\/\[token\]'/,'correction tokens are redacted before analytics events are built');
 const privacyPage=await readFile(new URL('../app/datenschutz/page.tsx',import.meta.url),'utf8');
-assert.match(privacyPage,/technische Zustellereignisse/,'privacy notice explains provider delivery event processing');
-assert.match(privacyPage,/sieben Tage gültiger Korrektur-Link/,'privacy notice explains correction-link purpose and retention');
+const privacyText=await readFile(new URL('../docs/legal/QONSUL_Datenschutzhinweise_Veroeffentlichungsfassung_2026-10-04.md',import.meta.url),'utf8');
+assert.match(privacyPage,/QONSUL_Datenschutzhinweise_Veroeffentlichungsfassung_2026-10-04\.md\?raw/,'privacy page renders the supplied publication copy');
+assert.match(privacyText,/technische Zustellereignisse/,'privacy notice explains provider delivery event processing');
+assert.match(privacyText,/sieben Tage gültiger Korrektur-Link/,'privacy notice explains correction-link purpose and retention');
 const diagnosticCss=await readFile(new URL('../app/globals.css',import.meta.url),'utf8');
 assert.match(diagnosticCss,/\.analysis-exhausted\{/,'the conversion state has its own neutral visual treatment');
 assert.match(diagnosticCss,/\.boost-action-button\{font-family:Arial,'Segoe UI',sans-serif;font-size:12px;font-weight:600;line-height:1\.4;min-height:46px;padding:14px 22px\}/,'both neighbouring actions share height, typography, weight, and horizontal padding');
