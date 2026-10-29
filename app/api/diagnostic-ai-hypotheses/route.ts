@@ -1,4 +1,5 @@
-import { CATEGORIES, parseAnalysis, type Category, type Cause } from '@/lib/analysis';
+import { parseAnalysis } from '@/lib/analysis';
+import { parseFocusPayload, publicHypothesesAsCauses } from '@/lib/public-ai-rounds';
 import { PublicAIIntakeError, requestPublicAIHypotheses } from '@/lib/public-ai-intake-client';
 import { json, rateLimit, readBody, setting } from '@/lib/server';
 
@@ -12,6 +13,7 @@ export async function POST(request: Request) {
     if (!uuid(body.sourceEventId)) return json({ error: customerError }, 400);
     if (body.analysisRound !== 1 && body.analysisRound !== 2) return json({ error: customerError }, 400);
     const analysis = parseAnalysis({ problem: body.problem, causes: body.causes, availableData: [] });
+    const focus = body.analysisRound === 2 ? parseFocusPayload(body, analysis.causes.map(cause => ({ category: cause.category, text: cause.text }))) : null;
     const result = await requestPublicAIHypotheses({
       source_event_id: body.sourceEventId,
       analysis_round: body.analysisRound,
@@ -19,17 +21,12 @@ export async function POST(request: Request) {
       // Accepted and still-pending hypotheses are unconfirmed context only: they
       // help the second round avoid repetition, but do not persist as causes.
       causes: analysis.causes.map(cause => ({ category: cause.category, text: cause.text })),
+      ...(focus || {}),
     }, { baseUrl: setting('QONSUL_COCKPIT_INTAKE_URL'), secret: setting('QONSUL_COCKPIT_INTAKE_SECRET') });
     if (result.status === 'processing') return json({ status: 'processing' }, 202);
 
-    const causes: Cause[] = result.hypotheses.map((hypothesis, index) => ({
-      id: hypothesis.id || `ai-${index}`,
-      category: CATEGORIES.includes(hypothesis.category as Category) ? hypothesis.category as Category : 'Prozess',
-      text: hypothesis.text,
-      check: hypothesis.reasoning_summary,
-      source: 'ai',
-    }));
-    parseAnalysis({ problem: analysis.problem, causes });
+    const causes = publicHypothesesAsCauses(result.hypotheses, body.analysisRound);
+    if (body.analysisRound === 1) parseAnalysis({ problem: analysis.problem, causes });
     return json({ causes, notice: 'QONSUL-Hypothesen ergänzt. Bitte mit Daten validieren; keine bestätigten Ursachen.' });
   } catch (error) {
     if (setting('STAGING_AI_INTAKE_TRACE') === 'true' && error instanceof PublicAIIntakeError) {
