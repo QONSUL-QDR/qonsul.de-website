@@ -1,5 +1,6 @@
 import {CONTACT_PRIVACY_VERSION} from '@/lib/contact';
 import {syncContactLead,type ContactLead} from '@/lib/crm';
+import {isCockpitIntakeConfigured} from '@/lib/cockpit-intake-config';
 import {sendContactSummary} from '@/lib/mail';
 import {hash,json,purgeExpired,rateLimit,rawDb,readBody,setting} from '@/lib/server';
 import {requiredCompany} from '@/lib/required-company';
@@ -26,7 +27,7 @@ export async function POST(request:Request){
     if(previous)return json({stored:true,crmStatus:previous.crm_status,emailStatus:previous.email_status});
     if(!await rateLimit(request,'contact',6))return json({error:'Zu viele Kontaktanfragen. Bitte versuchen Sie es später erneut.'},429);
     const id=crypto.randomUUID(),now=Date.now();
-    const requestedCrm=setting('PRODUCTION_READY')==='true'&&!!setting('HUBSPOT_ACCESS_TOKEN');
+    const requestedCrm=setting('PRODUCTION_READY')==='true'&&isCockpitIntakeConfigured({baseUrl:setting('QONSUL_COCKPIT_INTAKE_URL'),secret:setting('QONSUL_COCKPIT_INTAKE_SECRET')});
     const requestedMail=setting('PRODUCTION_READY')==='true'&&!!setting('RESEND_API_KEY')&&!!setting('CONTACT_FROM_EMAIL')&&!!setting('PUBLIC_CONTACT_EMAIL');
     const crmStatus=requestedCrm?'pending':'not_configured',emailStatus=requestedMail?'pending':'not_configured';
     const retention=Math.min(730,Math.max(30,Number(setting('CONTACT_RETENTION_DAYS'))||90));

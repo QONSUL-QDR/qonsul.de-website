@@ -1,6 +1,6 @@
 # QONSUL · Data · Quality · Risk
 
-Vollständige Beratungswebsite mit Ishikawa-Board, A4-PDF, Branchen-Bildfolge, Kontaktformular und optionaler KI-/CRM-Anbindung.
+Vollständige Beratungswebsite mit Ishikawa-Board, A4-PDF, Branchen-Bildfolge, Kontaktformular und optionaler KI-/Cockpit-Anbindung.
 
 **Status: Anwendungsvorschau, kein freigegebener Betrieb mit echten Kundendaten.** Das GitHub-Repository ist öffentlich. Die Übergabe verändert weder die Zugriffseinstellungen der laufenden Website noch ihre Datenbank.
 
@@ -35,7 +35,7 @@ pnpm build
 ```
 
 - `test`: Repository-Hygiene, Asset-Prüfsummen, Analyse-/Reportvalidierung, PDF und synchroner Download.
-- `test:integration`: eigener lokaler Server, 48 API-/Seitenprüfungen, danach Beenden. Verweigert aktive KI/CRM/E-Mail-Zustellung.
+- `test:integration`: eigener lokaler Server, 48 API-/Seitenprüfungen, danach Beenden. Verweigert aktive KI-, Cockpit- und E-Mail-Zustellung.
 - `build`: Worker unter `dist/server/index.js`, statische Dateien unter `dist/client`.
 - `pdf:sample`: A4-Muster regenerieren. Logo-Werkzeuge siehe [Assets](docs/ASSETS.md).
 - GitHub Actions prüft Einrichtung, Tests und Build. **Kein automatischer Produktiv-Deploy.**
@@ -48,7 +48,7 @@ pnpm build
 - Optional OpenAI Responses API; ohne Schlüssel/bei Fehlern Regeln. Hypothesen sind keine bewiesenen Ursachen.
 - Direkter PDF-Download ohne Kontaktdaten: eine A4-Seite quer, eingebettetes Drucklogo, sechs dezente Wasserzeichen, Firmenname und Website. Bis zu 30 Einträge; lange Texte mit Auslassungszeichen.
 - Gespeicherter vollständiger Report mit getrennten Einwilligungen und 30 Tage gültigem Zugriffsschlüssel.
-- Kontaktformular mit Name, E-Mail, optionalem Telefon/Unternehmen und Nachricht. Speicherung in D1; optional HubSpot und E-Mail-Zusammenfassung über Resend.
+- Kontaktformular mit Name, E-Mail, optionalem Telefon/Unternehmen und Nachricht. Speicherung in D1; optionale direkte Übergabe an das QONSUL-Cockpit und E-Mail-Zusammenfassung über Resend.
 - Löschung und begrenzte Aufbewahrung; keine Analyse-/Werbetracker.
 
 ## Struktur

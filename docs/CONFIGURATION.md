@@ -13,7 +13,6 @@ Lokale und Sites-Vorschau behalten ihre bisherige Laufzeitkonfiguration. Lokal e
 | `QONSUL_COCKPIT_INTAKE_URL` | Basis-URL des autorisierten Cockpit-Intake; lokal nur HTTPS oder ein lokaler Mock auf `localhost`/`127.0.0.1` |
 | `QONSUL_COCKPIT_INTAKE_SECRET` | Mindestens 32 Zeichen langes HMAC-Secret für Diagnostic-, Consultation- und KI-Intake; niemals committen oder ausgeben |
 | `STAGING_AI_INTAKE_TRACE` | Optional `true` für nicht-sensitive Staging-Diagnosemetadaten; lokal und standardmäßig `false` |
-| `HUBSPOT_ACCESS_TOKEN` | Kontakt-/Notiz- und Suchzugriff |
 | `RESEND_API_KEY` | E-Mail-Versand |
 | `CONTACT_FROM_EMAIL` | Beim Anbieter verifizierter Absender |
 | `PUBLIC_CONTACT_EMAIL` | Öffentliche Empfängeradresse; im Production-Candidate `info@qonsul.de` |
@@ -28,7 +27,7 @@ Lokale und Sites-Vorschau behalten ihre bisherige Laufzeitkonfiguration. Lokal e
 
 ## Ausgangsstand
 
-Die bestehende Vorschau verwendet Runtime-Revision 5. Firmenangaben, Empfängeradresse, Basis-URL, Frist, Modell und die beiden Sicherheitsschlüssel sind dort hinterlegt. Für OpenAI, HubSpot und Resend sind bei Übergabe **keine produktiven API-Zugänge konfiguriert**. `PRODUCTION_READY=false`.
+Die bestehende Vorschau verwendet Runtime-Revision 5. Firmenangaben, Empfängeradresse, Basis-URL, Frist, Modell und die beiden Sicherheitsschlüssel sind dort hinterlegt. Für OpenAI und Resend sind bei Übergabe **keine produktiven API-Zugänge konfiguriert**. `PRODUCTION_READY=false`.
 
 Konfiguration nur gelesen, nicht verändert. Geheimnisse werden nicht nach GitHub kopiert. Für neues Hosting stellt der Betreiber sie über einen Secret Store bereit.
 
