@@ -10,18 +10,18 @@ Next.js-App-Router-Komponenten laufen über Vinext/Vite auf Cloudflare Workers. 
 
 1. Browser sammelt Problem/Ursachen. Der PDF-Download wird lokal mit eingebettetem Logo erzeugt; keine Kontaktabgabe erforderlich.
 2. `POST /api/analyze` validiert/begrenzt Anfragen. Optional OpenAI mit getrenntem Opt-in und `store:false`; sonst gekennzeichnete Regeln. Musterbereinigung ist keine garantierte Anonymisierung.
-3. `POST /api/reports` speichert vollständige Analyse/Kontakt nur mit Speicher-Einwilligung. CRM/Trends separat. Zugriffsschlüssel im URL-Fragment, Übertragung zum Lesen/Löschen im Authorization-Header.
-4. `POST /api/contact` persistiert vor optionaler Übermittlung an HubSpot und Resend. Statusfelder machen Teilausfälle sichtbar.
+3. `POST /api/reports` speichert vollständige Analyse/Kontakt nur mit Speicher-Einwilligung. Cockpit-/Trends-Übergabe separat. Zugriffsschlüssel im URL-Fragment, Übertragung zum Lesen/Löschen im Authorization-Header.
+4. `POST /api/contact` persistiert vor optionaler direkter Übergabe an das QONSUL-Cockpit und der E-Mail-Zusammenfassung über Resend. Statusfelder machen Teilausfälle sichtbar.
 5. `POST /api/maintenance` verlangt ein Wartungsgeheimnis. Ablaufgrenzen verhindern Zugriff auch ohne laufenden Scheduler.
 
 | Tabelle | Inhalt / Betrieb |
 | --- | --- |
-| `reports` | Analyse, Kontakt, Einwilligung, Schlüssel-Hash, CRM-Status; 30 Tage Gültigkeit |
-| `contact_requests` | Nachricht, Kontakt, Bestätigung, CRM-/Mail-Status; Standard 90 Tage |
+| `reports` | Analyse, Kontakt, Einwilligung, Schlüssel-Hash, Cockpit-Übergabestatus; 30 Tage Gültigkeit |
+| `contact_requests` | Nachricht, Kontakt, Bestätigung, Cockpit-/Mail-Status; Standard 90 Tage |
 | `trends` | Optionale Kategoriezähler je Quartal, keine Freitexte |
 | `rate_limits` | Stundenbezogene pseudonymisierte Zähler, keine rohe IP |
 
-`sending` oder `needs_review` nach Timeout erfordert Abgleich beim Anbieter, keinen blinden Retry.
+`sending` oder `needs_review` nach Timeout erfordert Abgleich im Cockpit beziehungsweise beim E-Mail-Anbieter, keinen blinden Retry.
 
 ## Oberfläche und Export
 

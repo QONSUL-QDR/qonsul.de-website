@@ -36,8 +36,8 @@ Persistenz: `.wrangler/state`. Vor einer Dateisicherung zugehörige Entwicklungs
 
 - Dependency-/Security-Meldungen prüfen. Kein automatisches Zusammenführen von Dependabot-PRs.
 - Täglich geschützten Wartungsendpunkt über freigegebenen Scheduler aufrufen; Secret aus Secret Store, nicht aus eingechecktem Skript.
-- CRM/Mail `sending` und `needs_review` über interne Referenz beim Anbieter abgleichen, bevor erneut zugestellt wird.
-- Lösch-/Auskunftsanfragen auch in bereits belieferten Drittsystemen bearbeiten. Reportlöschung löscht nicht automatisch HubSpot-Notizen/E-Mails.
+- Cockpit-/Mail-Übergaben mit `sending` und `needs_review` über die interne Referenz im Cockpit beziehungsweise beim E-Mail-Anbieter abgleichen, bevor erneut zugestellt wird.
+- Lösch-/Auskunftsanfragen auch in bereits belieferten Zielsystemen bearbeiten. Reportlöschung löscht nicht automatisch zugehörige Cockpit-Datensätze oder zugestellte E-Mails.
 - Domain, TLS, Absenderverifikation, Zugangsschlüssel und Betreiberzugriff pflegen.
 - Je Veröffentlichung Commit, Build, Migrationen, Konfigurationsrevision, Zugriffsmodus und Rückfallversion dokumentieren.
 
