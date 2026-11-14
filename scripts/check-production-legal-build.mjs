@@ -23,7 +23,7 @@ const headTree = requiredOption('--head-tree');
 if (!path.isAbsolute(outputDir)) throw new Error('The legal-preview output directory must be absolute.');
 const config = JSON.parse(await readFile(path.join(root, 'dist/server/wrangler.json'), 'utf8'));
 assertProductionPublicRuntimeVars(config.vars);
-assert.equal(Object.keys(config.vars).length, 10);
+assert.equal(Object.keys(config.vars).length, 11);
 
 const probe = createServer();
 await new Promise((resolve, reject) => {
