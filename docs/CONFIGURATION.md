@@ -1,6 +1,6 @@
 # Konfiguration
 
-Die öffentliche Production-Candidate-Konfiguration liegt versioniert in `lib/production-public-runtime.mjs` (`PRODUCTION_PUBLIC_RUNTIME_V1`). Nur Builds mit `PRODUCTION_ARTIFACT_BUILD=true` binden ihre zehn freigegebenen Werte als Worker-`vars` in `dist/server/wrangler.json` ein. Seal und Verify verlangen die exakte Schlüsselliste und jeden exakten Wert; zusätzliche oder abweichende `vars` brechen ab. Diese Werte werden nicht in Cloudflare, GitHub-Environment-Variablen oder `.env` gesetzt.
+Die öffentliche Production-Candidate-Konfiguration liegt versioniert in `lib/production-public-runtime.mjs` (`PRODUCTION_PUBLIC_RUNTIME_V1`). Nur Builds mit `PRODUCTION_ARTIFACT_BUILD=true` binden ihre elf freigegebenen Werte als Worker-`vars` in `dist/server/wrangler.json` ein. Seal und Verify verlangen die exakte Schlüsselliste und jeden exakten Wert; zusätzliche oder abweichende `vars` brechen ab. Diese Werte werden nicht in Cloudflare, GitHub-Environment-Variablen oder `.env` gesetzt.
 
 Lokale und Sites-Vorschau behalten ihre bisherige Laufzeitkonfiguration. Lokal erzeugt `pnpm setup:local` die ignorierte `.dev.vars`; vorhandene Werte bleiben erhalten. Die `.env.example` dokumentiert lokale Schlüssel. Echte Secrets wie `QONSUL_COCKPIT_INTAKE_SECRET`, `RESEND_API_KEY`, `RATE_LIMIT_SALT` und `MAINTENANCE_SECRET` bleiben außerhalb von Git und werden separat je Zielumgebung verwaltet. CI benötigt keine Produktivgeheimnisse.
 
@@ -14,7 +14,7 @@ Lokale und Sites-Vorschau behalten ihre bisherige Laufzeitkonfiguration. Lokal e
 | `QONSUL_COCKPIT_INTAKE_SECRET` | Mindestens 32 Zeichen langes HMAC-Secret für Diagnostic-, Consultation- und KI-Intake; niemals committen oder ausgeben |
 | `STAGING_AI_INTAKE_TRACE` | Optional `true` für nicht-sensitive Staging-Diagnosemetadaten; lokal und standardmäßig `false` |
 | `RESEND_API_KEY` | E-Mail-Versand |
-| `CONTACT_FROM_EMAIL` | Beim Anbieter verifizierter Absender |
+| `CONTACT_FROM_EMAIL` | Beim Anbieter verifizierter Absender; im Production-Candidate `QONSUL Managementberatung <info@qonsul.de>` |
 | `PUBLIC_CONTACT_EMAIL` | Öffentliche Empfängeradresse; im Production-Candidate `info@qonsul.de` |
 | `CONTACT_RETENTION_DAYS` | Standard 90 |
 | `RATE_LIMIT_SALT` | Zufälliges serverseitiges Geheimnis |

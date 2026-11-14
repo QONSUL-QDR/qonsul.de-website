@@ -102,7 +102,7 @@ assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], path: '..
 assert.throws(() => assertArtifactFileManifest([{ ...artifactFiles[0], path: '/outside' }, artifactFiles[1]]));
 assertProductionAnalyticsEndpoint('https://cockpit.qonsul.de/api/v1/analytics/events');
 assert.throws(() => assertProductionAnalyticsEndpoint('https://staging.qonsul.de/api/v1/analytics/events'));
-assert.equal(Object.keys(PRODUCTION_PUBLIC_RUNTIME_V1).length, 10);
+assert.equal(Object.keys(PRODUCTION_PUBLIC_RUNTIME_V1).length, 11);
 assertProductionPublicRuntimeVars({ ...PRODUCTION_PUBLIC_RUNTIME_V1 });
 assert.throws(() => assertProductionPublicRuntimeVars(undefined), /vars are missing/);
 assert.throws(() => assertProductionPublicRuntimeVars({ ...PRODUCTION_PUBLIC_RUNTIME_V1, LEGAL_PHONE: undefined }), /LEGAL_PHONE/);
